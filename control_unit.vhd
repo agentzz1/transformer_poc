@@ -26,6 +26,7 @@ entity control_unit is
 
         -- Upstream handshake
         i_valid : in  std_logic;                     -- Input data valid
+        i_last  : in  std_logic;                     -- Input data last (per token)
         i_ready : out std_logic;                     -- Ready to accept input (backpressure to previous stage)
 
         -- Downstream handshake
@@ -67,7 +68,7 @@ architecture rtl of control_unit is
     -- =========================================================================
     type fsm_state_t is (
         ST_IDLE,            -- Waiting for i_valid
-        ST_MHA,             -- MHA sublayer active
+        ST_LOAD_MHA,        -- Loading input tokens into MHA
         ST_WAIT_MHA_DONE,   -- Waiting for MHA completion handshake
         ST_ADD_RESIDUAL_1,  -- First residual add
         ST_LAYERNORM_1,     -- First LayerNorm
@@ -98,6 +99,7 @@ architecture rtl of control_unit is
     -- =========================================================================
     constant CYCLE_CNT_WIDTH : positive := integer(ceil(log2(real(SEQ_LEN)))) + 1;
     signal cycle_cnt         : unsigned(CYCLE_CNT_WIDTH - 1 downto 0);
+    signal token_cnt         : integer := 0;
 
     -- =========================================================================
     -- One-shot / edge detection for sub-block done signals
@@ -126,20 +128,12 @@ begin
     layernorm_1_en     <= layernorm_1_en_r;
     layernorm_2_en     <= layernorm_2_en_r;
     o_valid            <= o_valid_r;
-    i_ready            <= '1' when state = ST_IDLE else '0';
+    i_ready            <= '1' when (state = ST_IDLE or state = ST_LOAD_MHA) else '0';
 
     -- =========================================================================
     -- Next-state logic (combinatorial — default assignments, no latches)
     -- =========================================================================
-    p_fsm_next : process (
-        state, i_valid, o_ready,
-        mha_active, mha_done,
-        ffn_active, ffn_done,
-        resadd1_active, residual_add_1_done,
-        resadd2_active, residual_add_2_done,
-        layernorm1_active, layernorm_1_done,
-        layernorm2_active, layernorm_2_done
-    ) is
+    p_fsm_next : process (all) is
     begin
         -- Default: stay in current state
         next_state <= state;
@@ -148,23 +142,25 @@ begin
 
             when ST_IDLE =>
                 if i_valid = '1' then
-                    next_state <= ST_MHA;
+                    next_state <= ST_LOAD_MHA;
+                end if;
+            
+            when ST_LOAD_MHA =>
+                if i_valid = '1' and i_last = '1' then
+                    report "CU: Token end detected. token_cnt=" & integer'image(token_cnt) severity note;
+                    if token_cnt = SEQ_LEN - 1 then
+                        next_state <= ST_WAIT_MHA_DONE;
+                        report "CU: Finished loading all tokens, moving to WAIT_MHA_DONE" severity note;
+                    end if;
                 end if;
 
-            when ST_MHA =>
-                -- MHA started; we immediately move to wait state in the next
-                -- cycle so the start pulse is one cycle wide.
-                next_state <= ST_WAIT_MHA_DONE;
-
             when ST_WAIT_MHA_DONE =>
-                if mha_active = '1' and mha_done = '1' then
-                    next_state <= ST_ADD_RESIDUAL_1;
+                if mha_done = '1' then
+                    next_state <= ST_LAYERNORM_1;
                 end if;
 
             when ST_ADD_RESIDUAL_1 =>
-                if resadd1_active = '1' and residual_add_1_done = '1' then
-                    next_state <= ST_LAYERNORM_1;
-                end if;
+                next_state <= ST_LAYERNORM_1;
 
             when ST_LAYERNORM_1 =>
                 if layernorm1_active = '1' and layernorm_1_done = '1' then
@@ -175,14 +171,12 @@ begin
                 next_state <= ST_WAIT_FFN_DONE;
 
             when ST_WAIT_FFN_DONE =>
-                if ffn_active = '1' and ffn_done = '1' then
-                    next_state <= ST_ADD_RESIDUAL_2;
+                if ffn_done = '1' then
+                    next_state <= ST_LAYERNORM_2;
                 end if;
 
             when ST_ADD_RESIDUAL_2 =>
-                if resadd2_active = '1' and residual_add_2_done = '1' then
-                    next_state <= ST_LAYERNORM_2;
-                end if;
+                next_state <= ST_LAYERNORM_2;
 
             when ST_LAYERNORM_2 =>
                 if layernorm2_active = '1' and layernorm_2_done = '1' then
@@ -203,7 +197,7 @@ begin
     -- =========================================================================
     -- Output-decoding logic (combinatorial — default assignments, no latches)
     -- =========================================================================
-    p_output_decode : process (state) is
+    p_output_decode : process (all) is
     begin
         -- Safe defaults for all outputs
         mha_start_r         <= '0';
@@ -216,8 +210,11 @@ begin
         o_valid_r           <= '0';
 
         case state is
-            when ST_MHA =>
-                mha_start_r <= '1';
+            when ST_LOAD_MHA =>
+                -- Pulse mha_start only on the first cycle of ST_LOAD_MHA
+                if token_cnt = 0 and cycle_cnt = 0 then
+                    mha_start_r <= '1';
+                end if;
                 mha_mode_r  <= "00";
 
             when ST_FFN =>
@@ -230,10 +227,12 @@ begin
                 residual_add_2_en_r <= '1';
 
             when ST_LAYERNORM_1 =>
-                layernorm_1_en_r <= '1';
+                layernorm_1_en_r    <= '1';
+                residual_add_1_en_r <= '1';
 
             when ST_LAYERNORM_2 =>
-                layernorm_2_en_r <= '1';
+                layernorm_2_en_r    <= '1';
+                residual_add_2_en_r <= '1';
 
             when ST_DONE =>
                 o_valid_r <= '1';
@@ -252,6 +251,10 @@ begin
             if rstn = '0' then
                 state <= ST_IDLE;
             else
+                if state /= next_state then
+                    report "CU: State transition: " & fsm_state_t'image(state) & 
+                           " -> " & fsm_state_t'image(next_state) severity note;
+                end if;
                 state <= next_state;
             end if;
         end if;
@@ -274,7 +277,7 @@ begin
                 layernorm2_active <= '0';
             else
                 -- Assert on entry, de-assert on exit
-                if state = ST_MHA then
+                if state = ST_LOAD_MHA then
                     mha_active <= '1';
                 elsif state = ST_ADD_RESIDUAL_1 then
                     mha_active <= '0';
@@ -318,18 +321,34 @@ begin
     -- Increments while the FSM is not idle; resets at the start of each new
     -- encoder-block pass.
     -- =========================================================================
-    p_cycle_counter : process (clk) is
+    p_counters : process (clk) is
     begin
         if rising_edge(clk) then
             if rstn = '0' then
                 cycle_cnt <= (others => '0');
-            elsif state = ST_IDLE and i_valid = '1' then
-                cycle_cnt <= (others => '0');
-            elsif state /= ST_IDLE and state /= ST_DONE then
-                cycle_cnt <= cycle_cnt + 1;
+                token_cnt <= 0;
+            else
+                -- Token counter for ST_LOADING
+                if state = ST_IDLE then
+                    token_cnt <= 0;
+                elsif state = ST_LOAD_MHA then
+                    if i_valid = '1' and i_last = '1' then
+                        if token_cnt < SEQ_LEN - 1 then
+                            token_cnt <= token_cnt + 1;
+                            report "CU: Buffered token " & integer'image(token_cnt + 1) severity note;
+                        end if;
+                    end if;
+                end if;
+
+                -- Cycle counter
+                if state = ST_IDLE and i_valid = '1' then
+                    cycle_cnt <= (others => '0');
+                elsif state /= ST_IDLE and state /= ST_DONE then
+                    cycle_cnt <= cycle_cnt + 1;
+                end if;
             end if;
         end if;
-    end process p_cycle_counter;
+    end process p_counters;
 
     seq_pos <= cycle_cnt;
 

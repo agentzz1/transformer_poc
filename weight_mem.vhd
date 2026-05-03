@@ -63,9 +63,13 @@ begin
 end architecture rtl;
 
 
--- ============================================================================
--- Top-level weight memory wrapper
--- ============================================================================
+
+library ieee;
+    use ieee.std_logic_1164.all;
+    use ieee.numeric_std.all;
+    use ieee.math_real.all;
+
+use work.clog2_pkg.all;
 
 entity weight_mem is
     generic (

@@ -28,23 +28,22 @@ entity psum_activation is
         i_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
         i_valid   : in  std_logic;
         i_last    : in  std_logic;
-        i_channel : in  integer range 0 to 511;
+        i_channel : in  integer;
 
         o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
         o_valid   : out std_logic;
         o_last    : out std_logic;
-        o_channel : out integer range 0 to 511
-    );
+        o_channel : out integer);
 end entity psum_activation;
 
 architecture rtl of psum_activation is
 
     signal running    : std_logic;
-    signal elem_cnt   : integer range 0 to NUM_ELEMENTS - 1;
+    signal elem_cnt   : integer := 0;
     signal data_reg   : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal valid_reg  : std_logic;
     signal last_reg   : std_logic;
-    signal chan_reg   : integer range 0 to 511;
+    signal chan_reg   : integer := 0;
     signal done_reg   : std_logic;
 
 begin

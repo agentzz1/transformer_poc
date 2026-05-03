@@ -29,6 +29,7 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 use work.utilities.all;
+use work.clog2_pkg.all;
 
 entity scalar_ops is
     generic (
@@ -60,8 +61,14 @@ architecture rtl of scalar_ops is
     constant FRAC_WIDTH : positive := DATA_WIDTH - ADDR_WIDTH;
     constant LUT_ENTRIES : positive := LUT_SIZE + 1;
 
-    constant PAD_DEPTH : natural := 0 when PIPE_LEN <= 3
-                                   else PIPE_LEN - 3;
+    function calc_pad_depth(p : positive) return natural is
+    begin
+        if p <= 3 then return 0;
+        else return p - 3;
+        end if;
+    end function;
+
+    constant PAD_DEPTH : natural := calc_pad_depth(PIPE_LEN);
 
     constant Q_FRAC  : positive := 12;
     constant Q_SCALE : real     := real(2**Q_FRAC);

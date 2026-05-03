@@ -32,12 +32,12 @@ entity softmax is
         i_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
         i_valid   : in  std_logic;
         i_last    : in  std_logic;
-        i_channel : in  integer range 0 to max_size_x - 1;
+        i_channel : in  integer;
 
         o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
         o_valid   : out std_logic;
         o_last    : out std_logic;
-        o_channel : out integer range 0 to max_size_x - 1
+        o_channel : out integer
     );
 end entity softmax;
 
@@ -151,7 +151,7 @@ architecture rtl of softmax is
     signal p1_addr    : unsigned(ADDR_WIDTH - 1 downto 0);
     signal p1_max     : signed(DATA_WIDTH - 1 downto 0);
     signal p1_max_lat : signed(DATA_WIDTH - 1 downto 0);
-    signal p1_chan    : integer range 0 to max_size_x - 1;
+    signal p1_chan    : integer := 0;
 
     ---------------------------------------------------------------------------
     -- Pass 2a signals
@@ -226,18 +226,32 @@ architecture rtl of softmax is
     function diff_to_lut_idx (
         diff : signed(DATA_WIDTH - 1 downto 0)
     ) return unsigned is
-        variable u_mag  : unsigned(DATA_WIDTH - 1 downto 0);
-        variable scaled : unsigned(15 downto 0);
+        variable u_mag   : unsigned(DATA_WIDTH - 1 downto 0);
+        variable product : unsigned(DATA_WIDTH + 5 downto 0);
+        variable scaled  : unsigned(DATA_WIDTH + 5 downto 0);
     begin
         if diff >= 0 then
             return to_unsigned(0, 8);
         end if;
-        u_mag  := unsigned(-diff);
-        scaled := shift_right(u_mag * to_unsigned(51, 6), 1);
-        if scaled > to_unsigned(LUT_MAX_IDX, 16) then
+        u_mag   := unsigned(-diff);
+        product := u_mag * to_unsigned(51, 6);
+        scaled  := shift_right(product, 1);
+        if scaled > to_unsigned(LUT_MAX_IDX, scaled'length) then
             return to_unsigned(LUT_MAX_IDX, 8);
         end if;
         return scaled(7 downto 0);
+    end function;
+
+    function exp_to_q15 (
+        exp_val : unsigned(LUT_WIDTH - 1 downto 0)
+    ) return signed is
+        variable shifted : unsigned(LUT_WIDTH - 1 downto 0);
+    begin
+        shifted := shift_right(exp_val, 1);
+        if shifted > to_unsigned(32767, LUT_WIDTH) then
+            return to_signed(32767, DATA_WIDTH);
+        end if;
+        return signed(resize(shifted, DATA_WIDTH));
     end function;
 
 begin
@@ -285,9 +299,19 @@ begin
     begin
         if rising_edge(clk) then
             if rstn = '0' then
-                state       <= ST_IDLE;
-                bram_wr_en  <= '0';
-                bram_wr_exp <= '0';
+                state         <= ST_IDLE;
+                bram_wr_en    <= '0';
+                bram_wr_exp   <= '0';
+                p2a_active    <= '0';
+                p2a_done      <= '0';
+                p2b_s1_valid  <= '0';
+                p2b_s2_valid  <= '0';
+                p2b_s3_valid  <= '0';
+                p1_addr       <= (others => '0');
+                p2a_addr      <= (others => '0');
+                p2a_wr_addr   <= (others => '0');
+                p2b_addr      <= (others => '0');
+                p2b_out_count <= (others => '0');
             else
                 -- One-cycle defaults
                 bram_wr_en  <= '0';
@@ -318,6 +342,9 @@ begin
                             if i_last = '1' then
                                 p1_max_lat <= signed(i_data);
                                 state      <= ST_PASS2A_EXP;
+                                report "SOFTMAX: Pass 1 finished immediately (i_last set)" severity note;
+                            else
+                                report "SOFTMAX: Pass 1 started" severity note;
                             end if;
                         end if;
 
@@ -338,6 +365,7 @@ begin
                             if i_last = '1' then
                                 p1_max_lat <= p1_max;
                                 state      <= ST_PASS2A_EXP;
+                                report "SOFTMAX: Pass 1 finished, moving to Pass 2a (Exp)" severity note;
                             else
                                 p1_addr <= p1_addr + 1;
                             end if;
@@ -359,6 +387,7 @@ begin
                             p2b_s1_valid  <= '0';
                             p2b_s2_valid  <= '0';
                             p2b_s3_valid  <= '0';
+                            report "SOFTMAX: Pass 2a finished, moving to Pass 2b (Norm)" severity note;
 
                         elsif p2a_active = '0' then
                             -- First cycle: issue address 0, prepare counters
@@ -375,18 +404,19 @@ begin
                             ));
                             p2a_sum <= p2a_sum + p2a_lut_val;
 
-                            -- Write exp to exp BRAM (truncate Q2.16 to DATA_WIDTH integer)
+                            -- Write exp to exp BRAM as Q1.15.  The previous
+                            -- integer truncation reduced most probabilities to
+                            -- zero after reciprocal multiplication.
                             bram_wr_en   <= '1';
                             bram_wr_addr <= p2a_wr_addr;
-                            bram_wr_data <= signed(resize(
-                                p2a_lut_val(LUT_WIDTH - 1 downto LUT_FRAC),
-                                DATA_WIDTH
-                            ));
+                            bram_wr_data <= exp_to_q15(p2a_lut_val);
                             bram_wr_exp <= '1';
 
                             -- Advance
                             p2a_wr_addr <= p2a_wr_addr + 1;
                             p2a_addr    <= p2a_addr + 1;
+                            
+                            report "SOFTMAX: Pass 2a cycle, wr_addr=" & integer'image(to_integer(p2a_wr_addr)) severity note;
 
                             if p2a_wr_addr = SEQ_LEN - 1 then
                                 p2a_done   <= '1';
@@ -438,6 +468,7 @@ begin
                             p2b_s1_valid  <= '0';
                             p2b_s2_valid  <= '0';
                             p2b_s3_valid  <= '0';
+                            report "SOFTMAX: Pass 2b finished, row complete" severity note;
 
                         else
                             p2b_addr <= p2b_addr + 1;

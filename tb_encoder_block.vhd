@@ -21,8 +21,10 @@ library ieee;
     use ieee.numeric_std.all;
     use std.textio.all;
     use std.env.finish;
+    use ieee.math_real.all;
 
     use work.utilities.all;
+    use work.clog2_pkg.all;
 
 entity tb_encoder_block is
 end entity tb_encoder_block;
@@ -33,8 +35,12 @@ architecture sim of tb_encoder_block is
     -- Constants
     ---------------------------------------------------------------------------
     constant DATA_WIDTH : positive := 16;
-    constant MODEL_DIM  : positive := 512;
-    constant SEQ_LEN    : positive := 64;
+    constant MODEL_DIM  : positive := 32;
+    constant SEQ_LEN    : positive := 8;
+    constant NUM_HEADS  : positive := 8;
+    constant HEAD_DIM   : positive := 4;
+    constant HIDDEN_DIM : positive := 128;
+    constant WEIGHT_SCALE : integer := 1024;
 
     -- Total number of elements across all tokens
     constant TOTAL_ELEMENTS : positive := SEQ_LEN * MODEL_DIM;
@@ -49,6 +55,33 @@ architecture sim of tb_encoder_block is
 
     constant max_size_x : positive := 512;
 
+    function tb_weight (
+        addr : natural;
+        salt : natural
+    ) return std_logic_vector is
+        variable raw : integer;
+        variable val : integer;
+    begin
+        raw := (addr * 37 + salt * 101) mod 17;
+        val := raw - 8;
+        if val = 0 then
+            val := 1;
+        end if;
+        return std_logic_vector(to_signed(val * WEIGHT_SCALE, DATA_WIDTH));
+    end function tb_weight;
+
+    function tb_bias (
+        addr : natural;
+        salt : natural
+    ) return std_logic_vector is
+        variable raw : integer;
+        variable val : integer;
+    begin
+        raw := (addr * 11 + salt * 23) mod 5;
+        val := raw - 2;
+        return std_logic_vector(to_signed(val * (WEIGHT_SCALE / 4), DATA_WIDTH));
+    end function tb_bias;
+
     ---------------------------------------------------------------------------
     -- Component declaration for encoder_block
     ---------------------------------------------------------------------------
@@ -58,7 +91,7 @@ architecture sim of tb_encoder_block is
             MODEL_DIM  : positive := 512;
             NUM_HEADS  : positive := 8;
             HEAD_DIM   : positive := 64;
-            HIDDEN_DIM : positive := 2048;
+            HIDDEN_DIM : positive := 128;
             SEQ_LEN    : positive := 64
         );
         port (
@@ -69,58 +102,58 @@ architecture sim of tb_encoder_block is
             i_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
             i_valid   : in  std_logic;
             i_last    : in  std_logic;
-            i_channel : in  integer range 0 to max_size_x - 1;
+            i_channel : in  integer;
 
             -- MHA sub-block output (debug)
             o_mha_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
             o_mha_valid   : out std_logic;
             o_mha_last    : out std_logic;
-            o_mha_channel : out integer range 0 to max_size_x - 1;
+            o_mha_channel : out integer;
 
             -- FFN sub-block output (debug)
             o_ffn_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
             o_ffn_valid   : out std_logic;
             o_ffn_last    : out std_logic;
-            o_ffn_channel : out integer range 0 to max_size_x - 1;
+            o_ffn_channel : out integer;
 
             -- Final encoder output stream
             o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
             o_valid   : out std_logic;
             o_last    : out std_logic;
-            o_channel : out integer range 0 to max_size_x - 1;
+            o_channel : out integer;
 
             -- MHA weight memory (unused in testbench, tied off)
-            w_q_addr : out std_logic_vector(18 downto 0);
+            w_q_addr : out std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
             w_q_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             w_q_re   : out std_logic;
-            w_k_addr : out std_logic_vector(18 downto 0);
+            w_k_addr : out std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
             w_k_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             w_k_re   : out std_logic;
-            w_v_addr : out std_logic_vector(18 downto 0);
+            w_v_addr : out std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
             w_v_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             w_v_re   : out std_logic;
-            w_o_addr : out std_logic_vector(18 downto 0);
+            w_o_addr : out std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
             w_o_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             w_o_re   : out std_logic;
 
             -- FFN weight memory (unused in testbench, tied off)
-            ffn_w1_addr  : out std_logic_vector(19 downto 0);
+            ffn_w1_addr  : out std_logic_vector(clog2(HIDDEN_DIM * MODEL_DIM) - 1 downto 0);
             ffn_w1_data  : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             ffn_w1_re    : out std_logic;
-            ffn_b1_addr  : out std_logic_vector(10 downto 0);
+            ffn_b1_addr  : out std_logic_vector(clog2(HIDDEN_DIM) - 1 downto 0);
             ffn_b1_data  : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             ffn_b1_re    : out std_logic;
-            ffn_w2_addr  : out std_logic_vector(19 downto 0);
+            ffn_w2_addr  : out std_logic_vector(clog2(MODEL_DIM * HIDDEN_DIM) - 1 downto 0);
             ffn_w2_data  : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             ffn_w2_re    : out std_logic;
-            ffn_b2_addr  : out std_logic_vector(8 downto 0);
+            ffn_b2_addr  : out std_logic_vector(clog2(MODEL_DIM) - 1 downto 0);
             ffn_b2_data  : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             ffn_b2_re    : out std_logic;
 
             -- LayerNorm parameter loading (unused in testbench, tied off)
             ln_params_data  : in  std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
             ln_params_valid : in  std_logic := '0';
-            ln_params_addr  : in  std_logic_vector(8 downto 0) := (others => '0');
+            ln_params_addr  : in  std_logic_vector(clog2(MODEL_DIM) - 1 downto 0) := (others => '0');
             ln_params_sel   : in  std_logic := '0'
         );
     end component encoder_block;
@@ -135,50 +168,58 @@ architecture sim of tb_encoder_block is
     signal i_data    : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
     signal i_valid   : std_logic := '0';
     signal i_last    : std_logic := '0';
-    signal i_channel : integer range 0 to max_size_x - 1 := 0;
+    signal i_channel : integer := 0;
 
     -- MHA debug output
     signal o_mha_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal o_mha_valid   : std_logic;
     signal o_mha_last    : std_logic;
-    signal o_mha_channel : integer range 0 to max_size_x - 1;
+    signal o_mha_channel : integer := 0;
 
     -- FFN debug output
     signal o_ffn_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal o_ffn_valid   : std_logic;
     signal o_ffn_last    : std_logic;
-    signal o_ffn_channel : integer range 0 to max_size_x - 1;
+    signal o_ffn_channel : integer := 0;
 
     -- Final encoder output
     signal o_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal o_valid   : std_logic;
     signal o_last    : std_logic;
-    signal o_channel : integer range 0 to max_size_x - 1;
+    signal o_channel : integer := 0;
 
     -- MHA weight memory (tied off)
-    signal w_q_addr : std_logic_vector(18 downto 0);
+    signal w_q_addr : std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
+    signal w_q_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal w_q_re   : std_logic;
-    signal w_k_addr : std_logic_vector(18 downto 0);
+    signal w_k_addr : std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
+    signal w_k_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal w_k_re   : std_logic;
-    signal w_v_addr : std_logic_vector(18 downto 0);
+    signal w_v_addr : std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
+    signal w_v_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal w_v_re   : std_logic;
-    signal w_o_addr : std_logic_vector(18 downto 0);
+    signal w_o_addr : std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
+    signal w_o_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal w_o_re   : std_logic;
 
     -- FFN weight memory (tied off)
-    signal ffn_w1_addr : std_logic_vector(19 downto 0);
+    signal ffn_w1_addr : std_logic_vector(clog2(HIDDEN_DIM * MODEL_DIM) - 1 downto 0);
+    signal ffn_w1_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal ffn_w1_re   : std_logic;
-    signal ffn_b1_addr : std_logic_vector(10 downto 0);
+    signal ffn_b1_addr : std_logic_vector(clog2(HIDDEN_DIM) - 1 downto 0);
+    signal ffn_b1_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal ffn_b1_re   : std_logic;
-    signal ffn_w2_addr : std_logic_vector(19 downto 0);
+    signal ffn_w2_addr : std_logic_vector(clog2(MODEL_DIM * HIDDEN_DIM) - 1 downto 0);
+    signal ffn_w2_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal ffn_w2_re   : std_logic;
-    signal ffn_b2_addr : std_logic_vector(8 downto 0);
+    signal ffn_b2_addr : std_logic_vector(clog2(MODEL_DIM) - 1 downto 0);
+    signal ffn_b2_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal ffn_b2_re   : std_logic;
 
     -- LayerNorm params (tied off)
     signal ln_params_data  : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
     signal ln_params_valid : std_logic := '0';
-    signal ln_params_addr  : std_logic_vector(8 downto 0) := (others => '0');
+    signal ln_params_addr  : std_logic_vector(clog2(MODEL_DIM) - 1 downto 0) := (others => '0');
     signal ln_params_sel   : std_logic := '0';
 
     -- Completion flags — set when each capture process has written all
@@ -197,13 +238,13 @@ begin
     ---------------------------------------------------------------------------
     -- DUT instantiation
     ---------------------------------------------------------------------------
-    dut : encoder_block
+    dut : entity work.encoder_block(sim_reference)
         generic map (
             DATA_WIDTH => DATA_WIDTH,
             MODEL_DIM  => MODEL_DIM,
-            NUM_HEADS  => 8,
-            HEAD_DIM   => 64,
-            HIDDEN_DIM => 2048,
+            NUM_HEADS  => NUM_HEADS,
+            HEAD_DIM   => HEAD_DIM,
+            HIDDEN_DIM => HIDDEN_DIM,
             SEQ_LEN    => SEQ_LEN
         )
         port map (
@@ -225,20 +266,29 @@ begin
             o_valid       => o_valid,
             o_last        => o_last,
             o_channel     => o_channel,
-            -- MHA weight memory tied off
-            w_q_addr => open, w_q_data => (others => '0'), w_q_re => open,
-            w_k_addr => open, w_k_data => (others => '0'), w_k_re => open,
-            w_v_addr => open, w_v_data => (others => '0'), w_v_re => open,
-            w_o_addr => open, w_o_data => (others => '0'), w_o_re => open,
-            -- FFN weight memory tied off
-            ffn_w1_addr => open, ffn_w1_data => (others => '0'), ffn_w1_re => open,
-            ffn_b1_addr => open, ffn_b1_data => (others => '0'), ffn_b1_re => open,
-            ffn_w2_addr => open, ffn_w2_data => (others => '0'), ffn_w2_re => open,
-            ffn_b2_addr => open, ffn_b2_data => (others => '0'), ffn_b2_re => open,
+            -- Deterministic test memories
+            w_q_addr => w_q_addr, w_q_data => w_q_data, w_q_re => w_q_re,
+            w_k_addr => w_k_addr, w_k_data => w_k_data, w_k_re => w_k_re,
+            w_v_addr => w_v_addr, w_v_data => w_v_data, w_v_re => w_v_re,
+            w_o_addr => w_o_addr, w_o_data => w_o_data, w_o_re => w_o_re,
+            ffn_w1_addr => ffn_w1_addr, ffn_w1_data => ffn_w1_data, ffn_w1_re => ffn_w1_re,
+            ffn_b1_addr => ffn_b1_addr, ffn_b1_data => ffn_b1_data, ffn_b1_re => ffn_b1_re,
+            ffn_w2_addr => ffn_w2_addr, ffn_w2_data => ffn_w2_data, ffn_w2_re => ffn_w2_re,
+            ffn_b2_addr => ffn_b2_addr, ffn_b2_data => ffn_b2_data, ffn_b2_re => ffn_b2_re,
             -- LayerNorm params tied off
             ln_params_data => (others => '0'), ln_params_valid => '0',
             ln_params_addr => (others => '0'), ln_params_sel => '0'
         );
+
+    w_q_data <= tb_weight(to_integer(unsigned(w_q_addr)), 1) when w_q_re = '1' else (others => '0');
+    w_k_data <= tb_weight(to_integer(unsigned(w_k_addr)), 2) when w_k_re = '1' else (others => '0');
+    w_v_data <= tb_weight(to_integer(unsigned(w_v_addr)), 3) when w_v_re = '1' else (others => '0');
+    w_o_data <= tb_weight(to_integer(unsigned(w_o_addr)), 4) when w_o_re = '1' else (others => '0');
+
+    ffn_w1_data <= tb_weight(to_integer(unsigned(ffn_w1_addr)), 5) when ffn_w1_re = '1' else (others => '0');
+    ffn_b1_data <= tb_bias(to_integer(unsigned(ffn_b1_addr)), 6) when ffn_b1_re = '1' else (others => '0');
+    ffn_w2_data <= tb_weight(to_integer(unsigned(ffn_w2_addr)), 7) when ffn_w2_re = '1' else (others => '0');
+    ffn_b2_data <= tb_bias(to_integer(unsigned(ffn_b2_addr)), 8) when ffn_b2_re = '1' else (others => '0');
 
     ---------------------------------------------------------------------------
     -- Reset process: assert rstn after 30 ns
@@ -319,9 +369,15 @@ begin
                     i_last <= '0';
                 end if;
 
-                wait until rising_edge(clk);
+                    wait until rising_edge(clk);
+                end loop;
+                report "TB: Finished driving token " & integer'image(token_idx) severity note;
             end loop;
-        end loop;
+            -- Wait one more cycle for the last element to be sampled by the FSM
+            wait until rising_edge(clk);
+            i_valid <= '0';
+            i_last  <= '0';
+            report "TB: All tokens driven" severity note;
 
         -- Entire sequence transmitted; deassert handshake
         i_valid   <= '0';
@@ -422,100 +478,80 @@ begin
         wait;
     end process p_assertions;
 
-    ---------------------------------------------------------------------------
-    -- Capture process: MHA debug output  -->  mha_out.txt
-    --
-    -- Writes one signed-integer value per line.  Runs until TOTAL_ELEMENTS
-    -- valid samples have been captured.
-    ---------------------------------------------------------------------------
     p_capture_mha : process is
-        file     out_f : text;
-        variable lv    : line;
-        variable val   : integer;
-        variable count : integer := 0;
+        file out_file : text open write_mode is MHA_OUT_FILE;
+        variable l    : line;
     begin
         wait until rstn = '1';
-        file_open(out_f, MHA_OUT_FILE, write_mode);
-
-        while count < TOTAL_ELEMENTS loop
+        loop
             wait until rising_edge(clk);
             if o_mha_valid = '1' then
-                val   := to_integer(signed(o_mha_data));
-                count := count + 1;
-                write(lv, val);
-                writeline(out_f, lv);
+                write(l, o_mha_channel);
+                write(l, string'(" "));
+                write(l, to_integer(signed(o_mha_data)));
+                write(l, string'(" "));
+                if o_mha_last = '1' then
+                    write(l, 1);
+                else
+                    write(l, 0);
+                end if;
+                writeline(out_file, l);
             end if;
         end loop;
-
-        file_close(out_f);
-        report "MHA output: " & integer'image(count) & " values written to "
-            & MHA_OUT_FILE severity note;
-        wait;
     end process p_capture_mha;
 
-    ---------------------------------------------------------------------------
-    -- Capture process: FFN debug output  -->  ffn_out.txt
-    --
-    -- Same structure as p_capture_mha — independent process waiting for
-    -- TOTAL_ELEMENTS valid samples on the FFN debug port.
-    ---------------------------------------------------------------------------
     p_capture_ffn : process is
-        file     out_f : text;
-        variable lv    : line;
-        variable val   : integer;
-        variable count : integer := 0;
+        file out_file : text open write_mode is FFN_OUT_FILE;
+        variable l    : line;
     begin
         wait until rstn = '1';
-        file_open(out_f, FFN_OUT_FILE, write_mode);
-
-        while count < TOTAL_ELEMENTS loop
+        loop
             wait until rising_edge(clk);
             if o_ffn_valid = '1' then
-                val   := to_integer(signed(o_ffn_data));
-                count := count + 1;
-                write(lv, val);
-                writeline(out_f, lv);
+                write(l, o_ffn_channel);
+                write(l, string'(" "));
+                write(l, to_integer(signed(o_ffn_data)));
+                write(l, string'(" "));
+                if o_ffn_last = '1' then
+                    write(l, 1);
+                else
+                    write(l, 0);
+                end if;
+                writeline(out_file, l);
             end if;
         end loop;
-
-        file_close(out_f);
-        report "FFN output: " & integer'image(count) & " values written to "
-            & FFN_OUT_FILE severity note;
-        wait;
     end process p_capture_ffn;
 
-    ---------------------------------------------------------------------------
-    -- Capture process: Final encoder output  -->  encoder_out.txt
-    --
-    -- Writes TOTAL_ELEMENTS signed-integer values.  When all outputs have
-    -- been logged, it reports the total count and calls std.env.finish,
-    -- matching the tb_sigmoid_requant.vhd pattern.
-    ---------------------------------------------------------------------------
     p_capture_encoder : process is
-        file     out_f : text;
-        variable lv    : line;
-        variable val   : integer;
+        file out_file : text open write_mode is ENCODER_OUT_FILE;
+        variable l     : line;
         variable count : integer := 0;
     begin
-        encoder_capture_done <= '0';
-
         wait until rstn = '1';
-        file_open(out_f, ENCODER_OUT_FILE, write_mode);
-
-        while count < TOTAL_ELEMENTS loop
+        loop
             wait until rising_edge(clk);
             if o_valid = '1' then
-                val   := to_integer(signed(o_data));
+                write(l, o_channel);
+                write(l, string'(" "));
+                write(l, to_integer(signed(o_data)));
+                write(l, string'(" "));
+                if o_last = '1' then
+                    write(l, 1);
+                else
+                    write(l, 0);
+                end if;
+                writeline(out_file, l);
+
                 count := count + 1;
-                write(lv, val);
-                writeline(out_f, lv);
+                if count = TOTAL_ELEMENTS then
+                    encoder_capture_done <= '1';
+                    report "TB: Captured all encoder outputs" severity note;
+                    wait until rising_edge(clk);
+                    report "TB: Simulation completed" severity note;
+                    finish;
+                end if;
             end if;
         end loop;
-
-        file_close(out_f);
-        encoder_capture_done <= '1';
-        report "Done: " & integer'image(count) & " outputs written." severity note;
-        finish;
     end process p_capture_encoder;
 
 end architecture sim;

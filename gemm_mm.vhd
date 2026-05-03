@@ -61,7 +61,7 @@ entity gemm_mm is
         o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
         o_valid   : out std_logic;
         o_last    : out std_logic;
-        o_channel : out integer range 0 to max_size_x - 1
+        o_channel : out integer
     );
 end entity gemm_mm;
 
@@ -84,16 +84,16 @@ architecture rtl of gemm_mm is
     ---------------------------------------------------------------------------
     -- C accumulator buffer (M x N)
     ---------------------------------------------------------------------------
-    type accum_t is signed(2 * DATA_WIDTH downto 0);
+    subtype accum_t is signed(2 * DATA_WIDTH downto 0);
     type c_buf_t is array (0 to M * N - 1) of accum_t;
     signal c_buf : c_buf_t;
 
     ---------------------------------------------------------------------------
     -- MAC loop counters
     ---------------------------------------------------------------------------
-    signal mac_m : integer range 0 to M - 1;   -- output row
-    signal mac_n : integer range 0 to N - 1;   -- output col
-    signal mac_k : integer range 0 to K - 1;   -- inner dimension
+    signal mac_m : integer := 0;   -- output row
+    signal mac_n : integer := 0;   -- output col
+    signal mac_k : integer := 0;   -- inner dimension
 
     ---------------------------------------------------------------------------
     -- Pipelined read registers (addr/re in cycle N -> data in cycle N+1)
@@ -112,15 +112,15 @@ architecture rtl of gemm_mm is
     signal o_data_r    : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal o_valid_r   : std_logic;
     signal o_last_r    : std_logic;
-    signal o_channel_r : integer range 0 to 511;
+    signal o_channel_r : integer := 0;
 
     ---------------------------------------------------------------------------
     -- Flat index helpers
     ---------------------------------------------------------------------------
-    signal a_flat : integer range 0 to M * K - 1;
-    signal b_flat : integer range 0 to K * N - 1;
-    signal c_flat : integer range 0 to M * N - 1;
-    signal o_flat : integer range 0 to M * N - 1;
+    signal a_flat : integer := 0;
+    signal b_flat : integer := 0;
+    signal c_flat : integer := 0;
+    signal o_flat : integer := 0;
 
 begin
 
@@ -169,7 +169,7 @@ begin
     p_fsm : process (clk) is
         variable v_product : signed(2 * DATA_WIDTH - 1 downto 0);
         variable v_acc     : accum_t;
-        variable v_idx     : integer range 0 to M * N - 1;
+        variable v_idx     : integer;
         variable v_result  : signed(DATA_WIDTH - 1 downto 0);
     begin
         if rising_edge(clk) then
@@ -216,6 +216,7 @@ begin
                     when ST_LOAD_C =>
                         c_re <= '1';
                         if c_valid_r = '1' then
+                            report "GEMM: ST_LOAD_C m=" & integer'image(mac_m) & " n=" & integer'image(mac_n) & " flat=" & integer'image(c_flat);
                             c_buf(c_flat) <= resize(c_data_r, 2 * DATA_WIDTH + 1);
                             if mac_n = N - 1 then
                                 mac_n <= 0;

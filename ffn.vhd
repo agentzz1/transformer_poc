@@ -7,10 +7,11 @@ use work.clog2_pkg.all;
 
 entity ffn is
     generic (
-        DATA_WIDTH : integer := 16;
-        HIDDEN_DIM : integer := 2048;
-        MODEL_DIM  : integer := 512;
-        max_size_x : integer := 512
+        DATA_WIDTH : positive := 16;
+        HIDDEN_DIM : positive := 2048;
+        MODEL_DIM  : positive := 512;
+        SEQ_LEN    : positive := 64;
+        max_size_x : positive := 512
     );
     port (
         clk       : in  std_logic;
@@ -19,18 +20,19 @@ entity ffn is
         -- Control
         start     : in  std_logic;
         done      : out std_logic;
+        o_ready   : out std_logic;
 
         -- Streaming input (sequential, one element per cycle, MODEL_DIM total)
         i_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
         i_valid   : in  std_logic;
         i_last    : in  std_logic;
-        i_channel : in  integer range 0 to max_size_x - 1;
+        i_channel : in  integer;
 
         -- Streaming output (sequential, one element per cycle, MODEL_DIM total)
         o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
         o_valid   : out std_logic;
         o_last    : out std_logic;
-        o_channel : out integer range 0 to max_size_x - 1;
+        o_channel : out integer;
 
         -- W_1 weight memory: (HIDDEN_DIM x MODEL_DIM) -- FC1 weights
         w1_addr   : out std_logic_vector(clog2(HIDDEN_DIM * MODEL_DIM) - 1 downto 0);
@@ -60,11 +62,11 @@ architecture rtl of ffn is
     -- FSM state declaration
     ---------------------------------------------------------------------------
     type fsm_state_t is (
-        IDLE,
-        FC1_MATMUL,
-        GELU_ACTIVATE,
-        FC2_MATMUL,
-        DONE
+        ST_IDLE,
+        ST_FC1_MATMUL,
+        ST_GELU_ACTIVATE,
+        ST_FC2_MATMUL,
+        ST_DONE
     );
 
     signal state      : fsm_state_t;
@@ -113,7 +115,7 @@ architecture rtl of ffn is
             o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
             o_valid   : out std_logic;
             o_last    : out std_logic;
-            o_channel : out integer range 0 to max_size_x - 1
+            o_channel : out integer
         );
     end component;
 
@@ -133,12 +135,12 @@ architecture rtl of ffn is
             i_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
             i_valid   : in  std_logic;
             i_last    : in  std_logic;
-            i_channel : in  integer range 0 to max_size_x - 1;
+            i_channel : in  integer;
 
             o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
             o_valid   : out std_logic;
             o_last    : out std_logic;
-            o_channel : out integer range 0 to max_size_x - 1
+            o_channel : out integer
         );
     end component;
 
@@ -160,13 +162,16 @@ architecture rtl of ffn is
 
     -- Input buffer: captured from i_data stream during IDLE
     signal input_buffer     : vec_model_t;
-    signal input_cnt        : integer range 0 to MODEL_DIM - 1;
+    signal input_cnt        : integer := 0;
     signal input_captured   : std_logic;
 
     -- GELU output buffer: captured during GELU_ACTIVATE, read by FC2 GEMM
     signal gelu_out_buffer  : vec_hidden_t;
-    signal gelu_out_cnt     : integer range 0 to HIDDEN_DIM - 1;
+    signal gelu_out_cnt     : integer := 0;
     signal gelu_capture_done : std_logic;
+
+    -- Token loop control
+    signal token_cnt : integer := 0;
 
     ---------------------------------------------------------------------------
     -- Internal address buses from gemm_os B-ports (not exposed at top level)
@@ -190,17 +195,17 @@ architecture rtl of ffn is
     signal fc1_odata  : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal fc1_ovalid : std_logic;
     signal fc1_olast  : std_logic;
-    signal fc1_ochan  : integer range 0 to max_size_x - 1;
+    signal fc1_ochan  : integer := 0;
 
     signal gelu_odata  : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal gelu_ovalid : std_logic;
     signal gelu_olast  : std_logic;
-    signal gelu_ochan  : integer range 0 to max_size_x - 1;
+    signal gelu_ochan  : integer := 0;
 
     signal fc2_odata  : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal fc2_ovalid : std_logic;
     signal fc2_olast  : std_logic;
-    signal fc2_ochan  : integer range 0 to max_size_x - 1;
+    signal fc2_ochan  : integer := 0;
 
     -- Pipelined data for B-port reads (registered output of buffer lookup)
     signal fc1_b_data_reg : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -214,9 +219,23 @@ begin
     proc_fsm_reg : process(clk, rstn)
     begin
         if rstn = '0' then
-            state <= IDLE;
+            state     <= ST_IDLE;
+            token_cnt <= 0;
         elsif rising_edge(clk) then
+            if state /= next_state then
+                report "FFN: State transition " & fsm_state_t'image(state) & " -> " & fsm_state_t'image(next_state) & 
+                       " (Token " & integer'image(token_cnt) & ")" severity note;
+            end if;
             state <= next_state;
+
+            -- Increment token count when one token is fully processed
+            if state = ST_DONE then
+                if token_cnt = SEQ_LEN - 1 then
+                    token_cnt <= 0;
+                else
+                    token_cnt <= token_cnt + 1;
+                end if;
+            end if;
         end if;
     end process proc_fsm_reg;
 
@@ -228,31 +247,40 @@ begin
         next_state <= state;
 
         case state is
-            when IDLE =>
+            when ST_IDLE =>
                 if start = '1' or input_captured = '1' then
-                    next_state <= FC1_MATMUL;
+                    next_state <= ST_FC1_MATMUL;
                 end if;
 
-            when FC1_MATMUL =>
+            when ST_FC1_MATMUL =>
                 if fc1_done = '1' then
-                    next_state <= GELU_ACTIVATE;
+                    next_state <= ST_GELU_ACTIVATE;
                 end if;
 
-            when GELU_ACTIVATE =>
-                if gelu_done = '1' and gelu_capture_done = '1' then
-                    next_state <= FC2_MATMUL;
+            when ST_GELU_ACTIVATE =>
+                if gelu_capture_done = '1' then
+                    next_state <= ST_FC2_MATMUL;
                 end if;
 
-            when FC2_MATMUL =>
+            when ST_FC2_MATMUL =>
                 if fc2_done = '1' then
-                    next_state <= DONE;
+                    next_state <= ST_DONE;
                 end if;
 
-            when DONE =>
-                next_state <= IDLE;
+            when ST_DONE =>
+                if token_cnt = SEQ_LEN - 1 then
+                    next_state <= ST_IDLE; -- All tokens finished
+                else
+                    next_state <= ST_IDLE; -- Prepare for next token
+                end if;
 
         end case;
     end process proc_fsm_next;
+
+    -- Done signal for control unit: only high when all tokens are finished
+    done <= '1' when state = ST_DONE and token_cnt = SEQ_LEN - 1 else '0';
+    -- Ready for next token capture when in IDLE
+    o_ready <= '1' when state = ST_IDLE else '0';
 
     ---------------------------------------------------------------------------
     -- Input capture: accumulate MODEL_DIM elements from i_data stream
@@ -264,7 +292,7 @@ begin
             input_captured <= '0';
             input_buffer   <= (others => (others => '0'));
         elsif rising_edge(clk) then
-            if state = IDLE then
+            if state = ST_IDLE then
                 if i_valid = '1' then
                     input_buffer(input_cnt) <= i_data;
                     if input_cnt = MODEL_DIM - 1 then
@@ -295,30 +323,15 @@ begin
     end process proc_fc1_b_read;
 
     ---------------------------------------------------------------------------
-    -- Done output
-    ---------------------------------------------------------------------------
-    done <= '1' when state = DONE else '0';
-
-    ---------------------------------------------------------------------------
     -- FC1 start (combinatorial pulse when input fully captured)
     ---------------------------------------------------------------------------
-    fc1_start <= '1' when state = IDLE and (start = '1' or input_captured = '1') else '0';
+    fc1_start <= '1' when state = ST_IDLE and (start = '1' or input_captured = '1') else '0';
 
     ---------------------------------------------------------------------------
-    -- GELU start (registered pulse on FC1 completion)
+    -- GELU start (combinatorial pulse matching FC1 start)
     ---------------------------------------------------------------------------
-    proc_gelu_start : process(clk, rstn)
-    begin
-        if rstn = '0' then
-            gelu_start <= '0';
-        elsif rising_edge(clk) then
-            if state = FC1_MATMUL and fc1_done = '1' then
-                gelu_start <= '1';
-            else
-                gelu_start <= '0';
-            end if;
-        end if;
-    end process proc_gelu_start;
+    gelu_start <= fc1_start;
+
 
     ---------------------------------------------------------------------------
     -- GELU output capture: buffer streaming GELU output for FC2 B-port reads
@@ -330,12 +343,14 @@ begin
             gelu_out_cnt     <= 0;
             gelu_capture_done <= '0';
         elsif rising_edge(clk) then
-            if state = GELU_ACTIVATE then
+            if state = ST_FC1_MATMUL or state = ST_GELU_ACTIVATE then
                 if gelu_ovalid = '1' then
+                    report "FFN: Captured GELU element " & integer'image(gelu_out_cnt) severity note;
                     gelu_out_buffer(gelu_out_cnt) <= gelu_odata;
                     if gelu_out_cnt = HIDDEN_DIM - 1 then
                         gelu_out_cnt     <= 0;
                         gelu_capture_done <= '1';
+                        report "FFN: GELU capture complete." severity note;
                     else
                         gelu_out_cnt <= gelu_out_cnt + 1;
                     end if;
@@ -355,7 +370,7 @@ begin
         if rstn = '0' then
             fc2_start <= '0';
         elsif rising_edge(clk) then
-            if state = GELU_ACTIVATE and gelu_done = '1' and gelu_capture_done = '1' then
+            if state = ST_GELU_ACTIVATE and gelu_capture_done = '1' then
                 fc2_start <= '1';
             else
                 fc2_start <= '0';
@@ -497,7 +512,7 @@ begin
     -- Once fc2_done asserts, the FSM moves to DONE for one cycle then IDLE.
     ---------------------------------------------------------------------------
     o_data    <= fc2_odata;
-    o_valid   <= fc2_ovalid when (state = FC2_MATMUL or state = DONE) else '0';
+    o_valid   <= fc2_ovalid when (state = ST_FC2_MATMUL or state = ST_DONE) else '0';
     o_last    <= fc2_olast;
     o_channel <= fc2_ochan;
 

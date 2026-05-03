@@ -118,9 +118,12 @@ begin
 end architecture rtl;
 
 
---------------------------------------------------------------------------------
--- gemm_os — Output-Stationary GEMM Systolic Array Top-Level
---------------------------------------------------------------------------------
+
+library ieee;
+    use ieee.std_logic_1164.all;
+    use ieee.numeric_std.all;
+
+    use work.utilities.all;
 
 entity gemm_os is
     generic (
@@ -151,7 +154,7 @@ entity gemm_os is
         o_data         : out std_logic_vector(DATA_WIDTH - 1 downto 0);
         o_valid        : out std_logic;
         o_last         : out std_logic;
-        o_channel      : out integer range 0 to max_size_x - 1
+        o_channel      : out integer
     );
 end entity gemm_os;
 
@@ -236,8 +239,8 @@ architecture rtl of gemm_os is
     -- So drain = 2*(ROWS+COLS) — conservative upper bound.
     constant DRAIN_CYCLES : positive := 2 * (ROWS + COLS);
 
-    signal drain_cnt : integer range 0 to DRAIN_CYCLES;
-    signal rd_addr   : integer range 0 to ROWS * COLS - 1;
+    signal drain_cnt : integer := 0;
+    signal rd_addr   : integer := 0;
 
 begin
 

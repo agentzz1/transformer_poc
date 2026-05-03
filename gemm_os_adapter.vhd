@@ -52,8 +52,7 @@ entity gemm_os_adapter is
         o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
         o_valid   : out std_logic;
         o_last    : out std_logic;
-        o_channel : out integer range 0 to 2**30 - 1
-    );
+        o_channel : out integer);
 end entity gemm_os_adapter;
 
 architecture rtl of gemm_os_adapter is
@@ -68,9 +67,9 @@ architecture rtl of gemm_os_adapter is
     type state_t is (ST_IDLE, ST_READ_C, ST_MAC, ST_OUTPUT, ST_DONE);
     signal state : state_t;
 
-    signal m_cnt : integer range 0 to M - 1;
-    signal n_cnt : integer range 0 to N - 1;
-    signal k_cnt : integer range 0 to K - 1;
+    signal m_cnt : integer := 0;
+    signal n_cnt : integer := 0;
+    signal k_cnt : integer := 0;
 
     signal accum : signed(ACCUM_WIDTH - 1 downto 0);
 
@@ -83,7 +82,7 @@ architecture rtl of gemm_os_adapter is
     signal c_reg_valid : std_logic;
 
     signal mac_done     : std_logic;
-    signal output_cnt   : integer range 0 to M * N - 1;
+    signal output_cnt   : integer := 0;
     signal start_d1     : std_logic;
     signal start_pulse  : std_logic;
 

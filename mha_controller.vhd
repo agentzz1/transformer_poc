@@ -27,6 +27,7 @@ library ieee;
     use ieee.math_real.all;
 
 use work.clog2_pkg.all;
+use work.utilities.all;
 
 entity mha_controller is
     generic (
@@ -47,13 +48,13 @@ entity mha_controller is
         i_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
         i_valid   : in  std_logic;
         i_last    : in  std_logic;
-        i_channel : in  integer range 0 to max_size_x - 1;
+        i_channel : in  integer;
 
         -- Streaming output  (SEQ_LEN * MODEL_DIM elements)
         o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
         o_valid   : out std_logic;
         o_last    : out std_logic;
-        o_channel : out integer range 0 to max_size_x - 1;
+        o_channel : out integer;
 
         -- W_Q weight memory  (MODEL_DIM x MODEL_DIM)
         w_q_addr : out std_logic_vector(clog2(MODEL_DIM * MODEL_DIM) - 1 downto 0);
@@ -136,7 +137,7 @@ architecture rtl of mha_controller is
             o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
             o_valid   : out std_logic;
             o_last    : out std_logic;
-            o_channel : out integer range 0 to max_size_x - 1
+            o_channel : out integer
         );
     end component;
 
@@ -154,11 +155,11 @@ architecture rtl of mha_controller is
             i_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
             i_valid   : in  std_logic;
             i_last    : in  std_logic;
-            i_channel : in  integer range 0 to max_size_x - 1;
+            i_channel : in  integer;
             o_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
             o_valid   : out std_logic;
             o_last    : out std_logic;
-            o_channel : out integer range 0 to max_size_x - 1
+            o_channel : out integer
         );
     end component;
 
@@ -196,7 +197,7 @@ architecture rtl of mha_controller is
     -- Internal storage
     ---------------------------------------------------------------------------
     signal input_buf : buf_2d_slm_t;
-    signal input_cnt : integer range 0 to SEQ_LEN * MODEL_DIM - 1;
+    signal input_cnt : integer := 0;
 
     signal Q_buf      : buf_2d_shd_t;
     signal K_buf      : buf_2d_shd_t;
@@ -207,24 +208,24 @@ architecture rtl of mha_controller is
     ---------------------------------------------------------------------------
     -- Control counters
     ---------------------------------------------------------------------------
-    signal head_idx : integer range 0 to NUM_HEADS - 1;
+    signal head_idx : integer := 0;
 
     -- COMPUTE_SCORES triple loop
-    signal cs_i : integer range 0 to SEQ_LEN - 1;
-    signal cs_j : integer range 0 to SEQ_LEN - 1;
-    signal cs_d : integer range 0 to HEAD_DIM - 1;
+    signal cs_i : integer := 0;
+    signal cs_j : integer := 0;
+    signal cs_d : integer := 0;
 
     -- APPLY_SOFTMAX row and feed/capture state
-    signal as_row        : integer range 0 to SEQ_LEN - 1;
-    signal sm_feed_cnt   : integer range 0 to SEQ_LEN - 1;
-    signal sm_cap_cnt    : integer range 0 to SEQ_LEN - 1;
+    signal as_row        : integer := 0;
+    signal sm_feed_cnt   : integer := 0;
+    signal sm_cap_cnt    : integer := 0;
     signal sm_feeding    : std_logic;
     signal sm_capturing  : std_logic;
 
     -- ATTEND_V triple loop
-    signal av_i : integer range 0 to SEQ_LEN - 1;
-    signal av_d : integer range 0 to HEAD_DIM - 1;
-    signal av_j : integer range 0 to SEQ_LEN - 1;
+    signal av_i : integer := 0;
+    signal av_d : integer := 0;
+    signal av_j : integer := 0;
 
     ---------------------------------------------------------------------------
     -- Head-projection gemm_os  (Q / K / V, M=SEQ_LEN, K=MODEL_DIM, N=HEAD_DIM)
@@ -246,8 +247,9 @@ architecture rtl of mha_controller is
     signal hd_gemm_o_data  : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal hd_gemm_o_valid : std_logic;
     signal hd_gemm_o_last  : std_logic;
-    signal hd_gemm_o_chan  : integer range 0 to max_size_x - 1;
-    signal hd_cap_cnt      : integer range 0 to SEQ_LEN * HEAD_DIM - 1;
+    signal hd_gemm_o_chan  : integer := 0;
+    signal hd_cap_cnt      : integer := 0;
+    signal hd_gemm_active  : std_logic;
 
     -- Pipelined read data registers (addr/re in cycle N -> data in cycle N+1)
     signal hd_a_data_r : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -273,7 +275,9 @@ architecture rtl of mha_controller is
     signal out_gemm_o_data  : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal out_gemm_o_valid : std_logic;
     signal out_gemm_o_last  : std_logic;
-    signal out_gemm_o_chan  : integer range 0 to max_size_x - 1;
+    signal out_gemm_o_chan  : integer := 0;
+    signal out_cap_cnt      : integer := 0;
+    signal out_gemm_active  : std_logic;
 
     -- Pipelined read data registers
     signal out_a_data_r : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -285,11 +289,11 @@ architecture rtl of mha_controller is
     signal sm_i_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal sm_i_valid   : std_logic;
     signal sm_i_last    : std_logic;
-    signal sm_i_channel : integer range 0 to max_size_x - 1;
+    signal sm_i_channel : integer := 0;
     signal sm_o_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal sm_o_valid   : std_logic;
     signal sm_o_last    : std_logic;
-    signal sm_o_channel : integer range 0 to max_size_x - 1;
+    signal sm_o_channel : integer := 0;
 
 begin
 
@@ -322,8 +326,8 @@ begin
     ---------------------------------------------------------------------------
     p_hd_read : process (clk) is
         variable v_flat : natural range 0 to SEQ_LEN * MODEL_DIM - 1;
-        variable v_row  : integer range 0 to SEQ_LEN - 1;
-        variable v_col  : integer range 0 to MODEL_DIM - 1;
+        variable v_row  : integer;
+        variable v_col  : integer;
     begin
         if rising_edge(clk) then
             if rstn = '0' then
@@ -361,8 +365,8 @@ begin
     ---------------------------------------------------------------------------
     p_out_read : process (clk) is
         variable v_flat : natural range 0 to SEQ_LEN * MODEL_DIM - 1;
-        variable v_row  : integer range 0 to SEQ_LEN - 1;
-        variable v_col  : integer range 0 to MODEL_DIM - 1;
+        variable v_row  : integer;
+        variable v_col  : integer;
     begin
         if rising_edge(clk) then
             if rstn = '0' then
@@ -409,8 +413,8 @@ begin
     ---------------------------------------------------------------------------
     p_weight_map : process (all) is
         variable v_b_flat : natural range 0 to MODEL_DIM * HEAD_DIM - 1;
-        variable v_k      : integer range 0 to MODEL_DIM - 1;
-        variable v_n      : integer range 0 to HEAD_DIM - 1;
+        variable v_k      : integer;
+        variable v_n      : integer;
         variable v_w_phys : natural range 0 to MODEL_DIM * MODEL_DIM - 1;
     begin
         -- Defaults: zero, read disabled
@@ -554,8 +558,8 @@ begin
 
         variable v_acc  : signed(2 * DATA_WIDTH downto 0);
         variable v_part : signed(DATA_WIDTH - 1 downto 0);
-        variable v_row  : integer range 0 to SEQ_LEN - 1;
-        variable v_col  : integer range 0 to MODEL_DIM - 1;
+        variable v_row  : integer;
+        variable v_col  : integer;
 
     begin
         if rising_edge(clk) then
@@ -576,6 +580,8 @@ begin
                 hd_gemm_c_valid <= '0';
                 hd_gemm_c_data  <= (others => '0');
                 hd_cap_cnt      <= 0;
+                hd_gemm_active   <= '0';
+                out_gemm_active  <= '0';
                 out_gemm_start   <= '0';
                 out_gemm_a_valid <= '0';
                 out_gemm_b_valid <= '0';
@@ -617,7 +623,20 @@ begin
                         input_cnt <= 0;
                         head_idx  <= 0;
                         if start = '1' then
-                            state <= ST_BUFFER_INPUT;
+                            report "MHA: Starting ST_BUFFER_INPUT" severity note;
+                            if i_valid = '1' then
+                                v_row := 0;
+                                v_col := 0;
+                                input_buf(v_row, v_col) <= i_data;
+                                input_cnt <= 1;
+                                if SEQ_LEN * MODEL_DIM = 1 then
+                                    state <= ST_PROJ_Q;
+                                else
+                                    state <= ST_BUFFER_INPUT;
+                                end if;
+                            else
+                                state <= ST_BUFFER_INPUT;
+                            end if;
                         end if;
 
                     ------------------------------------------------------------
@@ -631,8 +650,15 @@ begin
                             if input_cnt = SEQ_LEN * MODEL_DIM - 1 then
                                 input_cnt <= 0;
                                 state     <= ST_PROJ_Q;
+                                report "MHA: Finished buffering input, starting Head 0" severity note;
                             else
                                 input_cnt <= input_cnt + 1;
+                                if input_cnt >= 224 then
+                                    report "MHA: Captured element " & integer'image(input_cnt) severity note;
+                                end if;
+                                if (input_cnt + 1) mod 32 = 0 then
+                                    report "MHA: Buffered elements: " & integer'image(input_cnt + 1) severity note;
+                                end if;
                             end if;
                         end if;
 
@@ -653,18 +679,22 @@ begin
 
                         -- Capture matrix multiply output stream into Q_buf
                         if hd_gemm_o_valid = '1' then
-                            v_row := hd_cap_cnt / HEAD_DIM;
-                            v_col := hd_cap_cnt mod HEAD_DIM;
-                            Q_buf(v_row, v_col) <= hd_gemm_o_data;
-                            hd_cap_cnt <= hd_cap_cnt + 1;
+                            if hd_cap_cnt < SEQ_LEN * HEAD_DIM then
+                                v_row := hd_cap_cnt / HEAD_DIM;
+                                v_col := hd_cap_cnt mod HEAD_DIM;
+                                Q_buf(v_row, v_col) <= hd_gemm_o_data;
+                                hd_cap_cnt <= hd_cap_cnt + 1;
+                            end if;
                         end if;
 
                         if hd_gemm_done = '1' then
                             state           <= ST_PROJ_K;
+                            hd_gemm_active  <= '0';
                             hd_gemm_a_valid <= '0';
                             hd_gemm_b_valid <= '0';
                             hd_gemm_c_valid <= '0';
                             hd_cap_cnt      <= 0;
+                            report "MHA: Head " & integer'image(head_idx) & " Q-Projection finished" severity note;
                         end if;
 
                     ------------------------------------------------------------
@@ -676,24 +706,30 @@ begin
                         hd_gemm_c_valid <= '1';
                         hd_gemm_c_data  <= (others => '0');
 
-                        if hd_gemm_start = '0' and hd_gemm_done = '0' then
-                            hd_gemm_start <= '1';
-                            hd_cap_cnt    <= 0;
+                        if hd_gemm_active = '0' and hd_gemm_done = '0' then
+                            hd_gemm_start  <= '1';
+                            hd_gemm_active <= '1';
+                            hd_cap_cnt     <= 0;
                         end if;
 
+                        -- Capture matrix multiply output stream into K_buf
                         if hd_gemm_o_valid = '1' then
-                            v_row := hd_cap_cnt / HEAD_DIM;
-                            v_col := hd_cap_cnt mod HEAD_DIM;
-                            K_buf(v_row, v_col) <= hd_gemm_o_data;
-                            hd_cap_cnt <= hd_cap_cnt + 1;
+                            if hd_cap_cnt < SEQ_LEN * HEAD_DIM then
+                                v_row := hd_cap_cnt / HEAD_DIM;
+                                v_col := hd_cap_cnt mod HEAD_DIM;
+                                K_buf(v_row, v_col) <= hd_gemm_o_data;
+                                hd_cap_cnt <= hd_cap_cnt + 1;
+                            end if;
                         end if;
 
                         if hd_gemm_done = '1' then
                             state           <= ST_PROJ_V;
+                            hd_gemm_active  <= '0';
                             hd_gemm_a_valid <= '0';
                             hd_gemm_b_valid <= '0';
                             hd_gemm_c_valid <= '0';
                             hd_cap_cnt      <= 0;
+                            report "MHA: Head " & integer'image(head_idx) & " K-Projection finished" severity note;
                         end if;
 
                     ------------------------------------------------------------
@@ -705,16 +741,20 @@ begin
                         hd_gemm_c_valid <= '1';
                         hd_gemm_c_data  <= (others => '0');
 
-                        if hd_gemm_start = '0' and hd_gemm_done = '0' then
-                            hd_gemm_start <= '1';
-                            hd_cap_cnt    <= 0;
+                        if hd_gemm_active = '0' and hd_gemm_done = '0' then
+                            hd_gemm_start  <= '1';
+                            hd_gemm_active <= '1';
+                            hd_cap_cnt     <= 0;
                         end if;
 
+                        -- Capture matrix multiply output stream into V_buf
                         if hd_gemm_o_valid = '1' then
-                            v_row := hd_cap_cnt / HEAD_DIM;
-                            v_col := hd_cap_cnt mod HEAD_DIM;
-                            V_buf(v_row, v_col) <= hd_gemm_o_data;
-                            hd_cap_cnt <= hd_cap_cnt + 1;
+                            if hd_cap_cnt < SEQ_LEN * HEAD_DIM then
+                                v_row := hd_cap_cnt / HEAD_DIM;
+                                v_col := hd_cap_cnt mod HEAD_DIM;
+                                V_buf(v_row, v_col) <= hd_gemm_o_data;
+                                hd_cap_cnt <= hd_cap_cnt + 1;
+                            end if;
                         end if;
 
                         if hd_gemm_done = '1' then
@@ -722,9 +762,12 @@ begin
                             cs_i            <= 0;
                             cs_j            <= 0;
                             cs_d            <= 0;
+                            hd_gemm_active  <= '0';
                             hd_gemm_a_valid <= '0';
                             hd_gemm_b_valid <= '0';
                             hd_gemm_c_valid <= '0';
+                            hd_cap_cnt      <= 0;
+                            report "MHA: Head " & integer'image(head_idx) & " V-Projection finished" severity note;
                         end if;
 
                     ------------------------------------------------------------
@@ -754,10 +797,11 @@ begin
                             if cs_j = SEQ_LEN - 1 then
                                 cs_j <= 0;
                                 if cs_i = SEQ_LEN - 1 then
-                                    state         <= ST_APPLY_SOFTMAX;
-                                    as_row        <= 0;
-                                    sm_feeding    <= '0';
-                                    sm_capturing  <= '0';
+                                    state        <= ST_APPLY_SOFTMAX;
+                                    as_row       <= 0;
+                                    sm_feeding   <= '0';
+                                    sm_capturing <= '0';
+                                    report "MHA: Head " & integer'image(head_idx) & " Scores computed" severity note;
                                 else
                                     cs_i <= cs_i + 1;
                                 end if;
@@ -788,6 +832,7 @@ begin
                             sm_i_last    <= '0';
                             sm_i_data    <= S_buf(as_row, 0);
                             sm_i_channel <= 0;
+                            report "MHA: Softmax feeding row " & integer'image(as_row) severity note;
 
                         elsif sm_feeding = '1' then
                             if sm_feed_cnt = SEQ_LEN - 2 then
@@ -809,7 +854,14 @@ begin
 
                         -- Capture phase
                         if sm_capturing = '1' and sm_o_valid = '1' then
-                            S_buf(as_row, sm_cap_cnt) <= sm_o_data;
+                            if sm_cap_cnt = 0 then
+                                report "MHA: Softmax capturing row " & integer'image(as_row) severity note;
+                            end if;
+                            
+                            if sm_cap_cnt < SEQ_LEN then
+                                S_buf(as_row, sm_cap_cnt) <= sm_o_data;
+                            end if;
+                            
                             if sm_o_last = '1' then
                                 sm_capturing <= '0';
                                 if as_row = SEQ_LEN - 1 then
@@ -817,11 +869,14 @@ begin
                                     av_i  <= 0;
                                     av_d  <= 0;
                                     av_j  <= 0;
+                                    report "MHA: Head " & integer'image(head_idx) & " Softmax finished" severity note;
                                 else
                                     as_row <= as_row + 1;
                                 end if;
                             else
-                                sm_cap_cnt <= sm_cap_cnt + 1;
+                                if sm_cap_cnt < SEQ_LEN then
+                                    sm_cap_cnt <= sm_cap_cnt + 1;
+                                end if;
                             end if;
                         end if;
 
@@ -854,9 +909,11 @@ begin
                                 if av_i = SEQ_LEN - 1 then
                                     if head_idx = NUM_HEADS - 1 then
                                         state <= ST_OUTPUT_PROJ;
+                                        report "MHA: All heads finished, starting Output Projection" severity note;
                                     else
                                         head_idx <= head_idx + 1;
                                         state    <= ST_PROJ_Q;
+                                        report "MHA: Head " & integer'image(head_idx) & " finished, starting Head " & integer'image(head_idx + 1) severity note;
                                     end if;
                                 else
                                     av_i <= av_i + 1;
@@ -879,8 +936,9 @@ begin
                         out_gemm_c_valid <= '1';
                         out_gemm_c_data  <= (others => '0');
 
-                        if out_gemm_start = '0' and out_gemm_done = '0' then
-                            out_gemm_start <= '1';
+                        if out_gemm_active = '0' and out_gemm_done = '0' then
+                            out_gemm_start  <= '1';
+                            out_gemm_active <= '1';
                         end if;
 
                         -- Forward gemm output directly
