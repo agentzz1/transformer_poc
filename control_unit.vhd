@@ -210,11 +210,12 @@ begin
         o_valid_r           <= '0';
 
         case state is
-            when ST_LOAD_MHA =>
-                -- Pulse mha_start only on the first cycle of ST_LOAD_MHA
-                if token_cnt = 0 and cycle_cnt = 0 then
+            when ST_IDLE =>
+                if i_valid = '1' then
                     mha_start_r <= '1';
                 end if;
+
+            when ST_LOAD_MHA =>
                 mha_mode_r  <= "00";
 
             when ST_FFN =>

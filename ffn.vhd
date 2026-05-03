@@ -248,7 +248,7 @@ begin
 
         case state is
             when ST_IDLE =>
-                if start = '1' or input_captured = '1' then
+                if input_captured = '1' then
                     next_state <= ST_FC1_MATMUL;
                 end if;
 
@@ -292,7 +292,7 @@ begin
             input_captured <= '0';
             input_buffer   <= (others => (others => '0'));
         elsif rising_edge(clk) then
-            if state = ST_IDLE then
+            if state = ST_IDLE and input_captured = '0' then
                 if i_valid = '1' then
                     input_buffer(input_cnt) <= i_data;
                     if input_cnt = MODEL_DIM - 1 then
@@ -308,24 +308,12 @@ begin
         end if;
     end process proc_input_capture;
 
-    ---------------------------------------------------------------------------
-    -- FC1 B-data pipelined read from input_buffer
-    -- gemm_os drives fc1_b_addr; we register the lookup result to match the
-    -- pipelined read timing (addr out -> data in on next cycle).
-    ---------------------------------------------------------------------------
-    proc_fc1_b_read : process(clk, rstn)
-    begin
-        if rstn = '0' then
-            fc1_b_data_reg <= (others => '0');
-        elsif rising_edge(clk) then
-            fc1_b_data_reg <= input_buffer(to_integer(unsigned(fc1_b_addr)));
-        end if;
-    end process proc_fc1_b_read;
+    fc1_b_data_reg <= input_buffer(to_integer(unsigned(fc1_b_addr)));
 
     ---------------------------------------------------------------------------
     -- FC1 start (combinatorial pulse when input fully captured)
     ---------------------------------------------------------------------------
-    fc1_start <= '1' when state = ST_IDLE and (start = '1' or input_captured = '1') else '0';
+    fc1_start <= '1' when state = ST_IDLE and input_captured = '1' else '0';
 
     ---------------------------------------------------------------------------
     -- GELU start (combinatorial pulse matching FC1 start)
@@ -345,14 +333,15 @@ begin
         elsif rising_edge(clk) then
             if state = ST_FC1_MATMUL or state = ST_GELU_ACTIVATE then
                 if gelu_ovalid = '1' then
-                    report "FFN: Captured GELU element " & integer'image(gelu_out_cnt) severity note;
-                    gelu_out_buffer(gelu_out_cnt) <= gelu_odata;
-                    if gelu_out_cnt = HIDDEN_DIM - 1 then
-                        gelu_out_cnt     <= 0;
-                        gelu_capture_done <= '1';
-                        report "FFN: GELU capture complete." severity note;
-                    else
-                        gelu_out_cnt <= gelu_out_cnt + 1;
+                    if (gelu_out_cnt = 0 and gelu_ochan = 0) or
+                       (gelu_out_cnt > 0 and gelu_ochan = gelu_out_cnt) then
+                        gelu_out_buffer(gelu_out_cnt) <= gelu_odata;
+                        if gelu_out_cnt = HIDDEN_DIM - 1 then
+                            gelu_out_cnt     <= 0;
+                            gelu_capture_done <= '1';
+                        else
+                            gelu_out_cnt <= gelu_out_cnt + 1;
+                        end if;
                     end if;
                 end if;
             else
@@ -378,17 +367,7 @@ begin
         end if;
     end process proc_fc2_start;
 
-    ---------------------------------------------------------------------------
-    -- FC2 B-data pipelined read from gelu_out_buffer
-    ---------------------------------------------------------------------------
-    proc_fc2_b_read : process(clk, rstn)
-    begin
-        if rstn = '0' then
-            fc2_b_data_reg <= (others => '0');
-        elsif rising_edge(clk) then
-            fc2_b_data_reg <= gelu_out_buffer(to_integer(unsigned(fc2_b_addr)));
-        end if;
-    end process proc_fc2_b_read;
+    fc2_b_data_reg <= gelu_out_buffer(to_integer(unsigned(fc2_b_addr)));
 
     ---------------------------------------------------------------------------
     -- FC1 GEMM instance
@@ -514,6 +493,6 @@ begin
     o_data    <= fc2_odata;
     o_valid   <= fc2_ovalid when (state = ST_FC2_MATMUL or state = ST_DONE) else '0';
     o_last    <= fc2_olast;
-    o_channel <= fc2_ochan;
+    o_channel <= token_cnt * MODEL_DIM + fc2_ochan;
 
 end architecture rtl;

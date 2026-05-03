@@ -238,7 +238,7 @@ begin
     ---------------------------------------------------------------------------
     -- DUT instantiation
     ---------------------------------------------------------------------------
-    dut : entity work.encoder_block(sim_reference)
+    dut : entity work.encoder_block(structural)
         generic map (
             DATA_WIDTH => DATA_WIDTH,
             MODEL_DIM  => MODEL_DIM,
