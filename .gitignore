@@ -1,0 +1,12 @@
+# GHDL / VHDL artefacts
+work/
+*.cf
+*.ghw
+*.o
+*.txt
+*.vcd
+*.log
+
+# Windows / OS artefacts
+Thumbs.db
+.DS_Store
