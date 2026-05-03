@@ -308,6 +308,8 @@ architecture structural of encoder_block is
     signal ffn_in_channel     : integer := 0;
     signal ffn_ready          : std_logic;
     signal ffn_active_internal : std_logic;
+    signal ffn_ready_d        : std_logic := '0';
+    signal ffn_wait_ready_low : std_logic := '0';
 
     -- Second residual-add + LN output stream (final encoder output)
     signal res2_out_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -511,7 +513,10 @@ begin
                     mha_replay_valid   <= '0';
                     mha_replay_last    <= '0';
                     mha_replay_channel <= 0;
-                elsif res1_ready = '1' then
+                elsif res1_ready = '0' then
+                    mha_replay_valid <= '0';
+                    mha_replay_last  <= '0';
+                elsif res1_ready = '1' and mha_replay_last = '0' then
                     mha_replay_data    <= mha_buffer(to_integer(mha_replay_raddr));
                     mha_replay_valid   <= '1';
                     mha_replay_channel <= to_integer(mha_replay_raddr);
@@ -531,6 +536,9 @@ begin
                     else
                         mha_replay_raddr <= mha_replay_raddr + 1;
                     end if;
+                else
+                    mha_replay_valid <= '0';
+                    mha_replay_last  <= '0';
                 end if;
             end if;
         end if;
@@ -583,7 +591,10 @@ begin
                     replay1_valid   <= '0';
                     replay1_last    <= '0';
                     replay1_channel <= 0;
-                elsif res1_ready = '1' then
+                elsif res1_ready = '0' then
+                    replay1_valid <= '0';
+                    replay1_last  <= '0';
+                elsif res1_ready = '1' and replay1_last = '0' then
                     replay1_data    <= input_buffer(to_integer(replay1_raddr));
                     replay1_valid   <= '1';
                     replay1_channel <= to_integer(replay1_raddr);
@@ -599,6 +610,9 @@ begin
                     else
                         replay1_raddr <= replay1_raddr + 1;
                     end if;
+                else
+                    replay1_valid <= '0';
+                    replay1_last  <= '0';
                 end if;
             end if;
         end if;
@@ -683,7 +697,10 @@ begin
                     ffn_replay_valid   <= '0';
                     ffn_replay_last    <= '0';
                     ffn_replay_channel <= 0;
-                elsif res2_ready = '1' then
+                elsif res2_ready = '0' then
+                    ffn_replay_valid <= '0';
+                    ffn_replay_last  <= '0';
+                elsif res2_ready = '1' and ffn_replay_last = '0' then
                     ffn_replay_data    <= ffn_buffer(to_integer(ffn_replay_raddr));
                     ffn_replay_valid   <= '1';
                     ffn_replay_channel <= to_integer(ffn_replay_raddr);
@@ -699,6 +716,9 @@ begin
                     else
                         ffn_replay_raddr <= ffn_replay_raddr + 1;
                     end if;
+                else
+                    ffn_replay_valid <= '0';
+                    ffn_replay_last  <= '0';
                 end if;
             end if;
         end if;
@@ -784,7 +804,11 @@ begin
                 ffn_in_last        <= '0';
                 ffn_in_channel     <= 0;
                 ffn_active_internal <= '0';
+                ffn_ready_d        <= '0';
+                ffn_wait_ready_low <= '0';
             else
+                ffn_ready_d <= ffn_ready;
+
                 -- Start active phase on ffn_start pulse
                 if ffn_start = '1' then
                     ffn_active_internal <= '1';
@@ -799,13 +823,24 @@ begin
                     ffn_in_valid   <= '0';
                     ffn_in_last    <= '0';
                     ffn_in_channel <= 0;
-                elsif ffn_ready = '1' then
+                    ffn_wait_ready_low <= '0';
+                elsif ffn_wait_ready_low = '1' then
+                    ffn_in_valid <= '0';
+                    ffn_in_last  <= '0';
+                    if ffn_ready = '0' then
+                        ffn_wait_ready_low <= '0';
+                    end if;
+                elsif ffn_ready = '0' then
+                    ffn_in_valid <= '0';
+                    ffn_in_last  <= '0';
+                elsif ffn_ready = '1' and ffn_ready_d = '1' and ffn_in_last = '0' then
                     ffn_in_data    <= res1_buffer(to_integer(ffn_in_raddr));
                     ffn_in_valid   <= '1';
                     ffn_in_channel <= to_integer(ffn_in_raddr) mod MODEL_DIM;
                     
                     if (to_integer(ffn_in_raddr) + 1) mod MODEL_DIM = 0 then
                         ffn_in_last <= '1';
+                        ffn_wait_ready_low <= '1';
                     else
                         ffn_in_last <= '0';
                     end if;
@@ -815,6 +850,9 @@ begin
                     else
                         ffn_in_raddr <= ffn_in_raddr + 1;
                     end if;
+                else
+                    ffn_in_valid <= '0';
+                    ffn_in_last  <= '0';
                 end if;
             end if;
         end if;
@@ -837,7 +875,10 @@ begin
                     replay2_valid   <= '0';
                     replay2_last    <= '0';
                     replay2_channel <= 0;
-                elsif res2_ready = '1' then
+                elsif res2_ready = '0' then
+                    replay2_valid <= '0';
+                    replay2_last  <= '0';
+                elsif res2_ready = '1' and replay2_last = '0' then
                     replay2_data    <= res1_buffer(to_integer(replay2_raddr));
                     replay2_valid   <= '1';
                     replay2_channel <= to_integer(replay2_raddr);
@@ -853,6 +894,9 @@ begin
                     else
                         replay2_raddr <= replay2_raddr + 1;
                     end if;
+                else
+                    replay2_valid <= '0';
+                    replay2_last  <= '0';
                 end if;
             end if;
         end if;

@@ -38,7 +38,6 @@ end entity psum_activation;
 
 architecture rtl of psum_activation is
 
-    signal running    : std_logic;
     signal elem_cnt   : integer := 0;
     signal data_reg   : std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal valid_reg  : std_logic;
@@ -49,24 +48,22 @@ architecture rtl of psum_activation is
 begin
 
     ---------------------------------------------------------------------------
-    -- Control FSM: start -> running -> done
+    -- Control: registered pass-through for the current PoC activation.
     ---------------------------------------------------------------------------
     proc_ctrl : process(clk, rstn)
     begin
         if rstn = '0' then
-            running  <= '0';
             elem_cnt <= 0;
             done_reg <= '0';
         elsif rising_edge(clk) then
             done_reg <= '0';
 
             if start = '1' then
-                running  <= '1';
                 elem_cnt <= 0;
-            elsif running = '1' and i_valid = '1' then
+            elsif i_valid = '1' then
                 if i_last = '1' or elem_cnt = NUM_ELEMENTS - 1 then
-                    running  <= '0';
                     done_reg <= '1';
+                    elem_cnt <= 0;
                 else
                     elem_cnt <= elem_cnt + 1;
                 end if;
@@ -87,7 +84,7 @@ begin
             last_reg  <= '0';
             chan_reg  <= 0;
         elsif rising_edge(clk) then
-            if running = '1' and i_valid = '1' then
+            if i_valid = '1' then
                 -- PoC: pass-through (bypass activation)
                 -- For GELU, replace with signed GELU LUT here.
                 data_reg  <= i_data;

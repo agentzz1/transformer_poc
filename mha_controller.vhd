@@ -214,6 +214,7 @@ architecture rtl of mha_controller is
     signal cs_i : integer := 0;
     signal cs_j : integer := 0;
     signal cs_d : integer := 0;
+    signal cs_acc : signed(63 downto 0) := (others => '0');
 
     -- APPLY_SOFTMAX row and feed/capture state
     signal as_row        : integer := 0;
@@ -226,6 +227,7 @@ architecture rtl of mha_controller is
     signal av_i : integer := 0;
     signal av_d : integer := 0;
     signal av_j : integer := 0;
+    signal av_acc : signed(63 downto 0) := (others => '0');
 
     ---------------------------------------------------------------------------
     -- Head-projection gemm_os  (Q / K / V, M=SEQ_LEN, K=MODEL_DIM, N=HEAD_DIM)
@@ -295,6 +297,24 @@ architecture rtl of mha_controller is
     signal sm_o_last    : std_logic;
     signal sm_o_channel : integer := 0;
 
+    function sat16 (
+        value : signed
+    ) return signed is
+        variable max_v : signed(value'length - 1 downto 0);
+        variable min_v : signed(value'length - 1 downto 0);
+    begin
+        max_v := to_signed(2 ** (DATA_WIDTH - 1) - 1, value'length);
+        min_v := to_signed(-(2 ** (DATA_WIDTH - 1)), value'length);
+
+        if value > max_v then
+            return to_signed(2 ** (DATA_WIDTH - 1) - 1, DATA_WIDTH);
+        elsif value < min_v then
+            return to_signed(-(2 ** (DATA_WIDTH - 1)), DATA_WIDTH);
+        end if;
+
+        return resize(value, DATA_WIDTH);
+    end function;
+
 begin
 
     ---------------------------------------------------------------------------
@@ -303,16 +323,54 @@ begin
     done <= '1' when state = ST_DONE else '0';
 
     ---------------------------------------------------------------------------
-    -- Head-projection gemm_os data: registered pipeline reads
+    -- Head-projection GEMM data.
     ---------------------------------------------------------------------------
-    hd_gemm_a_data <= hd_a_data_r;
-    hd_gemm_b_data <= hd_b_data_r;
+    p_hd_data_comb : process (all) is
+        variable v_flat : natural range 0 to SEQ_LEN * MODEL_DIM - 1;
+        variable v_row  : integer;
+        variable v_col  : integer;
+    begin
+        hd_gemm_a_data <= (others => '0');
+        hd_gemm_b_data <= (others => '0');
+
+        if hd_gemm_a_re = '1' then
+            v_flat := to_integer(unsigned(hd_gemm_a_addr));
+            v_row  := v_flat / MODEL_DIM;
+            v_col  := v_flat mod MODEL_DIM;
+            hd_gemm_a_data <= input_buf(v_row, v_col);
+        end if;
+
+        if state = ST_PROJ_Q then
+            hd_gemm_b_data <= w_q_data;
+        elsif state = ST_PROJ_K then
+            hd_gemm_b_data <= w_k_data;
+        elsif state = ST_PROJ_V then
+            hd_gemm_b_data <= w_v_data;
+        end if;
+    end process p_hd_data_comb;
 
     ---------------------------------------------------------------------------
-    -- Output-projection gemm_os data: registered pipeline reads
+    -- Output-projection GEMM data.
     ---------------------------------------------------------------------------
-    out_gemm_a_data <= out_a_data_r;
-    out_gemm_b_data <= out_b_data_r;
+    p_out_data_comb : process (all) is
+        variable v_flat : natural range 0 to SEQ_LEN * MODEL_DIM - 1;
+        variable v_row  : integer;
+        variable v_col  : integer;
+    begin
+        out_gemm_a_data <= (others => '0');
+        out_gemm_b_data <= (others => '0');
+
+        if out_gemm_a_re = '1' then
+            v_flat := to_integer(unsigned(out_gemm_a_addr));
+            v_row  := v_flat / MODEL_DIM;
+            v_col  := v_flat mod MODEL_DIM;
+            out_gemm_a_data <= concat_buf(v_row, v_col);
+        end if;
+
+        if state = ST_OUTPUT_PROJ then
+            out_gemm_b_data <= w_o_data;
+        end if;
+    end process p_out_data_comb;
 
     ---------------------------------------------------------------------------
     -- Head-projection A-port: pipelined read from input_buf
@@ -556,8 +614,8 @@ begin
     ---------------------------------------------------------------------------
     p_fsm : process (clk) is
 
-        variable v_acc  : signed(2 * DATA_WIDTH downto 0);
-        variable v_part : signed(DATA_WIDTH - 1 downto 0);
+        variable v_acc  : signed(63 downto 0);
+        variable v_prod : signed(2 * DATA_WIDTH - 1 downto 0);
         variable v_row  : integer;
         variable v_col  : integer;
 
@@ -570,10 +628,12 @@ begin
                 cs_i            <= 0;
                 cs_j            <= 0;
                 cs_d            <= 0;
+                cs_acc          <= (others => '0');
                 as_row          <= 0;
                 av_i            <= 0;
                 av_d            <= 0;
                 av_j            <= 0;
+                av_acc          <= (others => '0');
                 hd_gemm_start   <= '0';
                 hd_gemm_a_valid <= '0';
                 hd_gemm_b_valid <= '0';
@@ -762,6 +822,7 @@ begin
                             cs_i            <= 0;
                             cs_j            <= 0;
                             cs_d            <= 0;
+                            cs_acc          <= (others => '0');
                             hd_gemm_active  <= '0';
                             hd_gemm_a_valid <= '0';
                             hd_gemm_b_valid <= '0';
@@ -777,21 +838,21 @@ begin
                     -- S_buf[i][j] holds the running accumulator across cs_d.
                     ------------------------------------------------------------
                     when ST_COMPUTE_SCORES =>
+                        v_prod := signed(Q_buf(cs_i, cs_d)) * signed(K_buf(cs_j, cs_d));
+
                         if cs_d = 0 then
-                            v_part := (others => '0');
+                            v_acc := resize(v_prod, 64);
                         else
-                            v_part := signed(S_buf(cs_i, cs_j));
+                            v_acc := cs_acc + resize(v_prod, 64);
                         end if;
 
-                        v_acc := resize(v_part, 2 * DATA_WIDTH + 1)
-                                 + (signed(Q_buf(cs_i, cs_d))
-                                    * signed(K_buf(cs_j, cs_d)));
-
                         if cs_d = HEAD_DIM - 1 then
-                            -- Final: scale and store
+                            -- Product is Q2.30.  Sum is still Q2.30.
+                            -- Convert back to Q1.15 and apply sqrt(head_dim).
                             S_buf(cs_i, cs_j) <= std_logic_vector(
-                                resize(shift_right(v_acc, LOG_SQRT_HD), DATA_WIDTH)
+                                sat16(shift_right(v_acc, DATA_WIDTH - 1 + LOG_SQRT_HD))
                             );
+                            cs_acc <= (others => '0');
 
                             cs_d <= 0;
                             if cs_j = SEQ_LEN - 1 then
@@ -809,10 +870,7 @@ begin
                                 cs_j <= cs_j + 1;
                             end if;
                         else
-                            -- Intermediate: store partial
-                            S_buf(cs_i, cs_j) <= std_logic_vector(
-                                resize(v_acc, DATA_WIDTH)
-                            );
+                            cs_acc <= v_acc;
                             cs_d <= cs_d + 1;
                         end if;
 
@@ -869,6 +927,7 @@ begin
                                     av_i  <= 0;
                                     av_d  <= 0;
                                     av_j  <= 0;
+                                    av_acc <= (others => '0');
                                     report "MHA: Head " & integer'image(head_idx) & " Softmax finished" severity note;
                                 else
                                     as_row <= as_row + 1;
@@ -889,19 +948,18 @@ begin
                     -- Triple loop: i -> d -> j
                     ------------------------------------------------------------
                     when ST_ATTEND_V =>
-                        if av_j = 0 then
-                            v_part := (others => '0');
-                        else
-                            v_part := signed(concat_buf(av_i, head_idx * HEAD_DIM + av_d));
-                        end if;
+                        v_prod := signed(S_buf(av_i, av_j)) * signed(V_buf(av_j, av_d));
 
-                        v_acc := resize(v_part, 2 * DATA_WIDTH + 1)
-                                 + (signed(S_buf(av_i, av_j))
-                                    * signed(V_buf(av_j, av_d)));
+                        if av_j = 0 then
+                            v_acc := resize(v_prod, 64);
+                        else
+                            v_acc := av_acc + resize(v_prod, 64);
+                        end if;
 
                         if av_j = SEQ_LEN - 1 then
                             concat_buf(av_i, head_idx * HEAD_DIM + av_d)
-                                <= std_logic_vector(resize(v_acc, DATA_WIDTH));
+                                <= std_logic_vector(sat16(shift_right(v_acc, DATA_WIDTH - 1)));
+                            av_acc <= (others => '0');
 
                             av_j <= 0;
                             if av_d = HEAD_DIM - 1 then
@@ -909,10 +967,12 @@ begin
                                 if av_i = SEQ_LEN - 1 then
                                     if head_idx = NUM_HEADS - 1 then
                                         state <= ST_OUTPUT_PROJ;
+                                        out_gemm_active <= '0';
                                         report "MHA: All heads finished, starting Output Projection" severity note;
                                     else
                                         head_idx <= head_idx + 1;
                                         state    <= ST_PROJ_Q;
+                                        hd_gemm_active <= '0';
                                         report "MHA: Head " & integer'image(head_idx) & " finished, starting Head " & integer'image(head_idx + 1) severity note;
                                     end if;
                                 else
@@ -922,8 +982,7 @@ begin
                                 av_d <= av_d + 1;
                             end if;
                         else
-                            concat_buf(av_i, head_idx * HEAD_DIM + av_d)
-                                <= std_logic_vector(resize(v_acc, DATA_WIDTH));
+                            av_acc <= v_acc;
                             av_j <= av_j + 1;
                         end if;
 

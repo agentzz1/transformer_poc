@@ -84,7 +84,8 @@ architecture rtl of gemm_mm is
     ---------------------------------------------------------------------------
     -- C accumulator buffer (M x N)
     ---------------------------------------------------------------------------
-    subtype accum_t is signed(2 * DATA_WIDTH downto 0);
+    constant ACC_WIDTH : positive := 64;
+    subtype accum_t is signed(ACC_WIDTH - 1 downto 0);
     type c_buf_t is array (0 to M * N - 1) of accum_t;
     signal c_buf : c_buf_t;
 
@@ -122,6 +123,24 @@ architecture rtl of gemm_mm is
     signal c_flat : integer := 0;
     signal o_flat : integer := 0;
 
+    function sat16 (
+        value : signed
+    ) return signed is
+        variable max_v : signed(value'length - 1 downto 0);
+        variable min_v : signed(value'length - 1 downto 0);
+    begin
+        max_v := to_signed(2 ** (DATA_WIDTH - 1) - 1, value'length);
+        min_v := to_signed(-(2 ** (DATA_WIDTH - 1)), value'length);
+
+        if value > max_v then
+            return to_signed(2 ** (DATA_WIDTH - 1) - 1, DATA_WIDTH);
+        elsif value < min_v then
+            return to_signed(-(2 ** (DATA_WIDTH - 1)), DATA_WIDTH);
+        end if;
+
+        return resize(value, DATA_WIDTH);
+    end function;
+
 begin
 
     ---------------------------------------------------------------------------
@@ -138,6 +157,9 @@ begin
     a_addr <= std_logic_vector(to_unsigned(a_flat, AW_A));
     b_addr <= std_logic_vector(to_unsigned(b_flat, AW_B));
     c_addr <= std_logic_vector(to_unsigned(c_flat, AW_C));
+    a_re   <= '1' when state = ST_MAC else '0';
+    b_re   <= '1' when state = ST_MAC else '0';
+    c_re   <= '1' when state = ST_LOAD_C else '0';
 
     ---------------------------------------------------------------------------
     -- Registered read data (cycle N addr/re -> cycle N+1 data/valid)
@@ -189,9 +211,6 @@ begin
                 o_valid_r <= '0';
                 o_last_r  <= '0';
                 done      <= '0';
-                a_re      <= '0';
-                b_re      <= '0';
-                c_re      <= '0';
 
                 case state is
 
@@ -214,10 +233,8 @@ begin
                     -- c_buf as the initial accumulator value.
                     -----------------------------------------------------------
                     when ST_LOAD_C =>
-                        c_re <= '1';
-                        if c_valid_r = '1' then
-                            report "GEMM: ST_LOAD_C m=" & integer'image(mac_m) & " n=" & integer'image(mac_n) & " flat=" & integer'image(c_flat);
-                            c_buf(c_flat) <= resize(c_data_r, 2 * DATA_WIDTH + 1);
+                        if c_valid = '1' then
+                            c_buf(c_flat) <= shift_left(resize(signed(c_data), ACC_WIDTH), DATA_WIDTH - 1);
                             if mac_n = N - 1 then
                                 mac_n <= 0;
                                 if mac_m = M - 1 then
@@ -243,13 +260,10 @@ begin
                     -- The total is M*N*K MAC operations.
                     -----------------------------------------------------------
                     when ST_MAC =>
-                        a_re <= '1';
-                        b_re <= '1';
-
-                        if a_valid_r = '1' and b_valid_r = '1' then
-                            v_product := a_data_r * b_data_r;
+                        if a_valid = '1' and b_valid = '1' then
+                            v_product := signed(a_data) * signed(b_data);
                             v_idx     := mac_m * N + mac_n;
-                            v_acc     := c_buf(v_idx) + resize(v_product, 2 * DATA_WIDTH + 1);
+                            v_acc     := c_buf(v_idx) + resize(v_product, ACC_WIDTH);
                             c_buf(v_idx) <= v_acc;
 
                             if mac_k = K - 1 then
@@ -278,7 +292,7 @@ begin
                     -----------------------------------------------------------
                     when ST_OUTPUT =>
                         v_idx    := mac_m * N + mac_n;
-                        v_result := resize(shift_right(c_buf(v_idx), DATA_WIDTH - 1), DATA_WIDTH);
+                        v_result := sat16(shift_right(c_buf(v_idx), DATA_WIDTH - 1));
 
                         o_data_r    <= std_logic_vector(v_result);
                         o_valid_r   <= '1';

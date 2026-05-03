@@ -48,6 +48,19 @@ end entity residual_add;
 
 architecture rtl of residual_add is
 
+  function sat16_int (
+    value : integer
+  ) return signed is
+  begin
+    if value > 2 ** (DATA_WIDTH - 1) - 1 then
+      return to_signed(2 ** (DATA_WIDTH - 1) - 1, DATA_WIDTH);
+    elsif value < -(2 ** (DATA_WIDTH - 1)) then
+      return to_signed(-(2 ** (DATA_WIDTH - 1)), DATA_WIDTH);
+    end if;
+
+    return to_signed(value, DATA_WIDTH);
+  end function;
+
   type t_fsm_state is (ST_IDLE, ST_ADD_ELEMENTS, ST_LAYERNORM, ST_DONE);
   signal state : t_fsm_state;
 
@@ -91,7 +104,7 @@ begin
   -- Combined Synchronous FSM
   ----------------------------------------------------------------------------
   p_fsm : process(clk) is
-    variable sum_val : signed(DATA_WIDTH-1 downto 0);
+    variable sum_val : integer;
   begin
     if rising_edge(clk) then
       if rstn = '0' then
@@ -113,8 +126,8 @@ begin
                report "RES_ADD: IDLE data_v=" & std_logic'image(i_data_valid) & " res_v=" & std_logic'image(i_residual_valid);
             end if;
             if i_data_valid = '1' and i_residual_valid = '1' then
-               sum_val := signed(i_data) + signed(i_residual);
-               ln_data_in    <= std_logic_vector(sum_val);
+               sum_val := to_integer(signed(i_data)) + to_integer(signed(i_residual));
+               ln_data_in    <= std_logic_vector(sat16_int(sum_val));
                ln_valid_in   <= '1';
               ln_last_in    <= i_data_last;
               ln_channel_in <= i_data_channel;
@@ -130,8 +143,8 @@ begin
           when ST_ADD_ELEMENTS =>
             o_ready <= '1';
             if i_data_valid = '1' and i_residual_valid = '1' then
-              sum_val := signed(i_data) + signed(i_residual);
-              ln_data_in    <= std_logic_vector(sum_val);
+              sum_val := to_integer(signed(i_data)) + to_integer(signed(i_residual));
+              ln_data_in    <= std_logic_vector(sat16_int(sum_val));
               ln_valid_in   <= '1';
               ln_last_in    <= i_data_last;
               ln_channel_in <= i_data_channel;
