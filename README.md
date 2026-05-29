@@ -126,3 +126,86 @@ Run the real-time UART test suite to verify 10,000 images on the physical chip:
 python fpga_vs_python.py --port COM4 --count 10000
 ```
 This streams the images over COM4 and verifies the final, physical **77.21% accuracy** with **100.0% perfect bit-exact matches**!
+
+---
+
+## 🎨 VHDL Block Diagram Architecture
+
+Below is the clean vector block schematic of the FPGA hardware architecture. The physical image is pushed directly to the project root directory as [vit_fpga_architecture.png](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/vit_fpga_architecture.png):
+
+![ViT FPGA Block Diagram Architecture](vit_fpga_architecture.png)
+
+---
+
+## 📊 Modular Wiring Schematic (LaTeX TikZ Source)
+
+For LaTeX documentation, research papers, or project reports, you can compile the following standalone TikZ source code to produce the complete modular routing schematic:
+
+```latex
+\documentclass[tikz, border=10pt]{standalone}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+
+\begin{document}
+\begin{tikzpicture}[
+    font=\sffamily,
+    block/.style={rectangle, draw=blue!60!black, fill=blue!10, text width=3.2cm, align=center, minimum height=1.2cm, rounded corners=2pt, thick},
+    subblock/.style={rectangle, draw=purple!60!black, fill=purple!10, text width=2.4cm, align=center, minimum height=0.9cm, rounded corners=2pt, thick},
+    mem/.style={cylinder, draw=green!60!black, fill=green!10, shape border rotate=90, text width=2.2cm, align=center, minimum height=1.2cm, thick},
+    io/.style={ellipse, draw=red!60!black, fill=red!10, text width=2.2cm, align=center, minimum height=1cm, thick},
+    arrow/.style={-{Stealth[scale=1.2]}, thick},
+    bus/.style={arrow, double, double distance=1.8pt}
+]
+
+    % --- I/O and Wrapper layer ---
+    \node[io] (pixels) {Pixel Input Stream\\(784 Bytes via UART)};
+    \node[block, right=1.5cm of pixels, fill=orange!15, draw=orange!60!black] (top) {\textbf{basys3\_top.vhd}\\Clock Div, UART \& IO};
+    
+    % --- frontend ---
+    \node[block, below=1.5cm of top] (embed) {\textbf{patch\_embed.vhd}\\Patch Projection\\(16x7x7 -> 16x32 Tokens)};
+    \node[mem, right=1.2cm of embed] (weights_rom) {\textbf{weights\_pkg.vhd}\\Weights ROM\\(Q1.7 Int8)};
+    
+    % --- encoder block ---
+    \node[block, below=2cm of embed] (encoder) {\textbf{encoder\_block.vhd}\\Transformer Encoder\\Wrapper};
+    
+    % --- Submodules inside encoder ---
+    \node[subblock, below left=1.2cm and -0.5cm of encoder] (mha) {\textbf{mha\_controller.vhd}\\Multi-Head Self-Attention};
+    \node[subblock, below=0.8cm of mha] (softmax) {\textbf{softmax.vhd}\\exp-LUT Softmax};
+    \node[subblock, below right=1.2cm and -0.5cm of encoder] (ffn) {\textbf{ffn.vhd}\\Feed-Forward Net};
+    \node[subblock, below=0.8cm of ffn] (gelu) {\textbf{psum\_activation.vhd}\\GELU LUT};
+    \node[subblock, below=2.8cm of encoder] (ln) {\textbf{layernorm.vhd}\\LOD \& Shift LN};
+    \node[subblock, right=1cm of ln] (gemm) {\textbf{gemm\_os.vhd}\\Systolic GEMM Array};
+
+    % --- classifier ---
+    \node[block, below=5.2cm of encoder] (classifier) {\textbf{classifier.vhd}\\GAP, FC Proj \&\\Argmax Comparator};
+    \node[io, right=1.5cm of classifier] (display) {7-Segment Display\\Predicted Digit (0-9)};
+
+    % --- Connections & Buses ---
+    \draw[arrow] (pixels) -- (top);
+    \draw[bus] (top) -- node[midway, right] {RAW Pixels} (embed);
+    \draw[arrow] (weights_rom) -- (embed);
+    \draw[arrow] (weights_rom) |- (encoder);
+    \draw[arrow] (weights_rom) |- (classifier);
+    
+    \draw[bus] (embed) -- node[midway, left] {16 Tokens (Dim 32) + PosEmbed} (encoder);
+    
+    % Internals of encoder
+    \draw[arrow] ($(encoder.south)-(0.8,0)$) -- (mha.north);
+    \draw[arrow] (mha.south) -- (softmax.north);
+    \draw[arrow] (softmax.west) -- ++(-0.3,0) |- (mha.west);
+    \draw[arrow] (mha.east) -- (gemm.west);
+    \draw[arrow] (mha.south east) -- (ln.north west);
+    
+    \draw[arrow] ($(encoder.south)+(0.8,0)$) -- (ffn.north);
+    \draw[arrow] (ffn.south) -- (gelu.north);
+    \draw[arrow] (gelu.east) -- ++(0.3,0) |- (ffn.east);
+    \draw[arrow] (ffn.west) -- (gemm.east);
+    \draw[arrow] (ffn.south west) -- (ln.north east);
+    
+    % Output of encoder to classifier
+    \draw[bus] (encoder.south) -- ++(0,-4.5) -- (classifier.north);
+    \draw[arrow] (classifier) -- (display);
+    \draw[arrow] (classifier.north east) -- ++(0,1.2) -| (top.south east);
+
+\end{tikzpicture}
+\end{document}
+```
