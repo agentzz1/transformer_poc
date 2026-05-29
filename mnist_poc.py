@@ -441,30 +441,52 @@ def fake_q17(x: torch.Tensor) -> torch.Tensor:
 class HWLayerNorm(nn.Module):
     """
     Hardware-faithful LayerNorm matching layernorm.vhd exactly:
-      • standardize:  (x - mean) / std      (output has std ~ 1.0)
-      • NO affine (no gamma/beta) -- the FPGA has no learnable LN params
-      • saturate to Q1.7 via fake_q17       (the step the old QAT was MISSING)
-
-    The old QAT used nn.LayerNorm (float, affine, no saturation), so the model
-    learned activations up to +-3 that the int8 hardware (Q1.7, max +-1) cannot
-    represent and silently clips -> the 79% -> 49% accuracy collapse.  Training
-    WITH the saturation forces the model to keep LN outputs inside [-1, 1).
+      • Mean and variance in integer domain
+      • LOD-shift 1/sqrt approximation (no multiplier, matches layernorm.vhd)
+      • 2-bit headroom scaling (dividing by 4.0, matching LN_HEADROOM = 2)
+      • STE logic for backward gradient flow
     """
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        mean = x.mean(dim=-1, keepdim=True)
-        var  = x.var(dim=-1, unbiased=False, keepdim=True)
-        norm = (x - mean) / torch.sqrt(var + 1e-5)
-        return fake_q17(norm)
+        # Float LayerNorm for gradients (Backward) with 2-bit headroom scaling (divided by 4.0)
+        mean_f = x.mean(dim=-1, keepdim=True)
+        var_f = x.var(dim=-1, unbiased=False, keepdim=True)
+        float_out = (x - mean_f) / (torch.sqrt(var_f + 1e-5) * 4.0)
+        float_out = fake_q17(float_out)
+        
+        # Integer LOD LayerNorm matching layernorm.vhd (Forward)
+        x_int = (x * 128.0).round().clamp(-128.0, 127.0)
+        
+        mean_i = torch.div(x_int.sum(dim=-1, keepdim=True), 32, rounding_mode='floor')
+        x_diff = x_int - mean_i
+        
+        sum_sq = (x_int * x_int).sum(dim=-1, keepdim=True)
+        avg_sq = torch.div(sum_sq, 32, rounding_mode='floor')
+        var_i = torch.clamp(avg_sq - mean_i * mean_i, min=0)
+        
+        # Leading-One Detection (LOD) using float log2
+        lod = torch.clamp(torch.log2(var_i.float() + 0.5).floor().long(), min=0, max=31)
+        shift = (lod + 1) // 2
+        
+        # net = shift - frac, where frac = 7 - LN_HEADROOM = 5
+        net = shift - 5
+        norm_val_right = torch.div(x_diff, 2**net, rounding_mode='floor')
+        norm_val_left = x_diff * (2**(-net))
+        
+        hw_int = torch.where(net >= 0, norm_val_right, norm_val_left)
+        hw_out = torch.clamp(hw_int, -128.0, 127.0) / 128.0
+        
+        # STE: forward = hw_out, backward = float_out
+        return float_out + (hw_out - float_out).detach()
 
 
 class FQLinear(nn.Module):
     """
     Fake-Quantize Linear layer.
-    Simulates the FPGA GEMM:
-      • fake_q17 on inputs  (quantize activations)
-      • fake_q17 on weights (quantize weights)
-      • compute float matmul
-      • fake_q17 on output  (simulate >>7 + sat8 saturation)
+    Simulates the FPGA GEMM exactly:
+      • Weight and activation quantization to Q1.7 range
+      • Exact integer matrix multiplication
+      • Floor division by 128 (to simulate >>7 right shift) and saturation
+      • STE logic for backward gradient flow
     """
     def __init__(self, in_f: int, out_f: int, bias: bool = True):
         super().__init__()
@@ -473,22 +495,91 @@ class FQLinear(nn.Module):
         nn.init.xavier_uniform_(self.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Float path for gradient flow (Backward)
         w_q = fake_q17(self.weight)
         b_q = fake_q17(self.bias) if self.bias is not None else None
-        out = F.linear(fake_q17(x), w_q, b_q)
-        return fake_q17(out)
+        float_out = F.linear(fake_q17(x), w_q, b_q)
+        float_out = fake_q17(float_out)
+        
+        # Hardware path: exact integer matmul with truncation (>>7) and saturation
+        x_int = (x * 128.0).round().clamp(-128.0, 127.0)
+        w_int = (self.weight * 128.0).round().clamp(-128.0, 127.0)
+        if self.bias is not None:
+            b_int = (self.bias * 128.0).round().clamp(-128.0, 127.0)
+            acc = F.linear(x_int, w_int, b_int * 128.0)
+        else:
+            acc = F.linear(x_int, w_int)
+            
+        # Floor division by 128 simulates `>> 7`
+        hw_int = torch.div(acc, 128, rounding_mode='floor')
+        hw_out = torch.clamp(hw_int, -128.0, 127.0) / 128.0
+        
+        # STE: forward = hw_out, backward = float_out
+        return float_out + (hw_out - float_out).detach()
+
+
+class HWGELU(nn.Module):
+    """
+    Hardware-treues GELU matching the 256-byte VHDL/Integer GELU LUT exactly.
+    """
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("lut", torch.tensor(GELU_LUT_I8, dtype=torch.float32) / 128.0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        float_out = F.gelu(x)
+        x_int = (x * 128.0).round().clamp(-128.0, 127.0).long()
+        idx = x_int & 0xFF  # unsigned byte indexing
+        hw_out = self.lut[idx]
+        
+        # STE: forward = hw_out, backward = float_out
+        return float_out + (hw_out - float_out).detach()
+
+
+class HWSoftmax(nn.Module):
+    """
+    Hardware-treues Softmax matching softmax.vhd and the exp-LUT exactly.
+    """
+    def __init__(self):
+        super().__init__()
+        # Precomputed exp table (scaled to Q1.7 / 128, matching _EXP_LUT_Q16 >> 9)
+        self.register_buffer("lut", torch.tensor(_EXP_LUT_Q16, dtype=torch.float32) / 65536.0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        float_out = F.softmax(x, dim=-1)
+        
+        # Scale to integer domain
+        x_int = (x * 128.0).round().clamp(-128.0, 127.0)
+        x_max = x_int.max(dim=-1, keepdim=True)[0]
+        diff = x_int - x_max
+        
+        # Calculate indices matching _exp_q7_from_diff
+        magnitude = torch.clamp(-diff, min=0, max=128)
+        scaled = torch.div(magnitude * 255, 1280, rounding_mode='floor')
+        idx = torch.clamp(255 - scaled, min=0, max=255).long()
+        
+        exp_val = self.lut[idx]
+        denom = exp_val.sum(dim=-1, keepdim=True)
+        denom = torch.clamp(denom, min=1e-5)
+        
+        # Multiply by 128.0 before floor-division to match VHDL integer math
+        hw_out = torch.clamp(torch.div(exp_val * 128.0, denom, rounding_mode='floor'), 0.0, 127.0) / 128.0
+        
+        # STE: forward = hw_out, backward = float_out
+        return float_out + (hw_out - float_out).detach()
 
 
 class QATPostLNFFN(nn.Module):
-    """QAT-aware FFN: FQLinear(d_model→d_ff) → GELU → FQLinear(d_ff→d_model)."""
+    """QAT-aware FFN: FQLinear(d_model→d_ff) → HWGELU → FQLinear(d_ff→d_model)."""
     def __init__(self, d_model: int = D_MODEL, d_ff: int = D_FF):
         super().__init__()
         self.fc1 = FQLinear(d_model, d_ff,    bias=True)
         self.fc2 = FQLinear(d_ff,    d_model, bias=True)
+        self.gelu = HWGELU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.fc1(x)
-        h = fake_q17(F.gelu(h))   # GELU then re-quantize to Q1.7
+        h = self.gelu(h)
         return self.fc2(h)
 
 
@@ -498,71 +589,111 @@ _ATTN_FLOAT_SCALE: float = (2 ** _LOG_SQRT_HD) / Q_SCALE   # = 4/128 = 1/32
 
 
 class QATSelfAttention(nn.Module):
-    """Single-head self-attention with fake-quantized Q/K/V/O projections."""
+    """Single-head self-attention with hardware-faithful scoring, softmax and projections."""
     def __init__(self, d_model: int = D_MODEL):
         super().__init__()
         self.q = FQLinear(d_model, d_model, bias=False)
         self.k = FQLinear(d_model, d_model, bias=False)
         self.v = FQLinear(d_model, d_model, bias=False)
         self.o = FQLinear(d_model, d_model, bias=False)
+        self.softmax = HWSoftmax()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x : [B, SEQ, D]  (already in Q1.7 range)
-        Q = self.q(x)                                         # FQLinear already saturates
+        Q = self.q(x)
         K = self.k(x)
         V = self.v(x)
-        # Scores: match hardware  sat8(Q_int · K_int >> 9) = fake_q17(dotprod / 32)
-        scores = fake_q17(torch.bmm(Q, K.transpose(1, 2)) * _ATTN_FLOAT_SCALE)
-        probs  = fake_q17(F.softmax(scores, dim=-1))          # probs ∈ [0,1), still Q1.7
-        ctx    = fake_q17(torch.bmm(probs, V))
+        
+        # Float path (gradients)
+        scores_f = torch.bmm(Q, K.transpose(1, 2)) * _ATTN_FLOAT_SCALE
+        scores_f = fake_q17(scores_f)
+        
+        # Hardware path (>> 9 shift)
+        Q_int = (Q * 128.0).round().clamp(-128.0, 127.0)
+        K_int = (K * 128.0).round().clamp(-128.0, 127.0)
+        acc_scores = torch.bmm(Q_int, K_int.transpose(1, 2))
+        scores_shifted = torch.div(acc_scores, 512, rounding_mode='floor') # >> 9
+        scores_hw = torch.clamp(scores_shifted, -128.0, 127.0) / 128.0
+        
+        # Connect scores using STE
+        scores = scores_f + (scores_hw - scores_f).detach()
+        
+        probs = self.softmax(scores)
+        
+        # Context vector multiplication: probs @ V
+        probs_f = fake_q17(probs)
+        ctx_f = torch.bmm(probs_f, fake_q17(V))
+        ctx_f = fake_q17(ctx_f)
+        
+        probs_int = (probs * 128.0).round().clamp(-128.0, 127.0)
+        V_int = (V * 128.0).round().clamp(-128.0, 127.0)
+        acc_ctx = torch.bmm(probs_int, V_int)
+        ctx_shifted = torch.div(acc_ctx, 128, rounding_mode='floor') # >> 7
+        ctx_hw = torch.clamp(ctx_shifted, -128.0, 127.0) / 128.0
+        
+        # Connect ctx using STE
+        ctx = ctx_f + (ctx_hw - ctx_f).detach()
+        
         return self.o(ctx)
 
 
 class QATPostLNEncoderLayer(nn.Module):
-    """Post-LN encoder layer with full fake-quantized forward pass."""
+    """Post-LN encoder layer with full hardware-faithful forward pass."""
     def __init__(self, d_model: int = D_MODEL, d_ff: int = D_FF, dropout: float = 0.1):
         super().__init__()
         self.attn  = QATSelfAttention(d_model)
         self.ffn   = QATPostLNFFN(d_model, d_ff)
-        self.norm1 = HWLayerNorm()   # HW-faithful: standardize + Q1.7 saturate, no affine
+        self.norm1 = HWLayerNorm()
         self.norm2 = HWLayerNorm()
         self.drop  = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # MHA sublayer: attn → fake-saturating add → LN
         x = self.norm1(fake_q17(x + self.drop(self.attn(x))))
-        # FFN sublayer
         x = self.norm2(fake_q17(x + self.drop(self.ffn(x))))
         return x
 
 
 class QATMNISTViT(nn.Module):
     """
-    MNIST ViT with a fully fake-quantized encoder.
-    The patch_embed, pos_embed, and classifier run in float
-    (they are outside the FPGA encoder_block in the final design).
+    MNIST ViT with a fully fake-quantized and hardware-faithful encoder, patch embed, and classifier.
+    Logit scaling is used during training to prevent cross-entropy saturation while keeping
+    the classifier fully quantized to Q1.7.
     """
     def __init__(self, d_model: int = D_MODEL, d_ff: int = D_FF, n_cls: int = 10,
                  dropout: float = 0.1):
         super().__init__()
         self.patch_embed = PatchEmbed()
+        # Convert standard projection to FQLinear to enforce Q1.7 bounds
+        self.patch_embed.proj = FQLinear(PATCH_SIZE * PATCH_SIZE, d_model, bias=True)
+        
         self.pos_embed   = nn.Parameter(torch.zeros(1, SEQ_LEN, d_model))
         self.encoder     = nn.Sequential(*[
             QATPostLNEncoderLayer(d_model, d_ff, dropout)
             for _ in range(N_LAYERS)
         ])
-        # No final LayerNorm: the FPGA encoder_block has none, GAP follows the
-        # last encoder norm directly.  (Was nn.LayerNorm before -> mismatch.)
         self.norm       = nn.Identity()
-        self.classifier = nn.Linear(d_model, n_cls)
+        self.classifier = FQLinear(d_model, n_cls, bias=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Quantize input images to simulate normalized int8 pixels before entering the embedder
+        x = fake_q17(x)
         x = self.patch_embed(x) + self.pos_embed
-        x = fake_q17(x)        # quantize to Q1.7 before encoder
+        x = fake_q17(x)
         x = self.encoder(x)
-        x = self.norm(x)       # Identity (kept for state_dict compatibility)
-        x = x.mean(dim=1)      # global average pool
-        return self.classifier(x)
+        x = self.norm(x)       # Identity
+        
+        # Global Average Pooling (GAP) matching hardware sum >> 4 exactly
+        gap_f = x.mean(dim=1)
+        x_int = (x * 128.0).round().clamp(-128.0, 127.0)
+        sum_tokens = x_int.sum(dim=1)
+        gap_int = torch.div(sum_tokens, 16, rounding_mode='floor')
+        gap_hw = torch.clamp(gap_int, -128.0, 127.0) / 128.0
+        
+        # Connect GAP using STE
+        gap = gap_f + (gap_hw - gap_f).detach()
+        
+        # Multiply by 8.0 (logit scaling) to prevent cross-entropy saturation while
+        # keeping the classifier strictly inside FQLinear Q1.7 constraints.
+        return self.classifier(gap) * 8.0
 
     def load_from_float(self, ckpt_path: str) -> None:
         """
@@ -698,12 +829,15 @@ def qat_train(
     model = QATMNISTViT().to(dev)
     # Auto-detect: float checkpoint has 'encoder.0.attn.in_proj_weight';
     # QAT checkpoint has 'encoder.0.attn.q.weight'.
-    sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)
-    if "encoder.0.attn.q.weight" in sd:
-        model.load_state_dict(sd)      # resume from prior QAT run
-        print(f"Resumed QAT model from {ckpt_path}")
+    if ckpt_path != "none" and Path(ckpt_path).exists():
+        sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        if "encoder.0.attn.q.weight" in sd:
+            model.load_state_dict(sd)      # resume from prior QAT run
+            print(f"Resumed QAT model from {ckpt_path}")
+        else:
+            model.load_from_float(ckpt_path)   # convert float → QAT
     else:
-        model.load_from_float(ckpt_path)   # convert float → QAT
+        print("Training QAT model FROM SCRATCH!")
 
     opt   = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
