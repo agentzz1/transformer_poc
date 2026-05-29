@@ -1,12 +1,41 @@
-# GHDL / VHDL artefacts
+# ── GHDL / simulation artefacts ──────────────────────────────────────────
 work/
+work_basys/
 *.cf
 *.ghw
 *.o
-*.txt
 *.vcd
 *.log
+# generated dumps: encoder_out*, py_*, pixels_*, reference_*, scales, ...
+*.txt
+dfx_runtime.txt
 
-# Windows / OS artefacts
+# ── Vivado artefacts (keep the .tcl build scripts, drop everything else) ──
+vivado_synth_test/*
+!vivado_synth_test/*.tcl
+*.bit
+*.mcs
+*.prm
+*.dcp
+*.rpt
+*.jou
+*.backup.log
+.Xil/
+
+# ── Python ───────────────────────────────────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# ── MNIST data (re-downloaded automatically by torchvision) ──────────────
+data/
+
+# ── Local / private (chat session exports, scratch, editor state) ────────
+.claude/
+scratch/
+extracted_sessions/
+
+# ── OS ───────────────────────────────────────────────────────────────────
 Thumbs.db
 .DS_Store

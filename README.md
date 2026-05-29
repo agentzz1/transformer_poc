@@ -77,6 +77,19 @@ ghdl -e --std=08 --workdir=work tb_encoder_block
 ghdl -r --std=08 --workdir=work tb_encoder_block --wave=waveform.ghw
 ```
 
+## UART Round-Trip Dashboard
+
+To see what the current UART test is doing, launch the small desktop dashboard:
+
+```bash
+python uart_roundtrip_gui.py --port COM4 --index 0
+```
+
+It loads one raw MNIST image, shows the 28x28 pixels, sends 784 bytes to the
+Basys 3, then waits for the probe ACK byte `0xA5` and the class byte (0-9)
+returned after inference. The ACK confirms the transfer; the class byte is the
+prediction from the FPGA.
+
 ## Known limitations / TODOs
 
 1. **Weight memories are external** -- `mha_controller` and `ffn` expose `w_*_addr / w_*_data / w_*_re` ports but no physical memory models are instantiated. A wrapper or testbench must provide BRAM/URAM blocks.

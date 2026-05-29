@@ -30,7 +30,7 @@ from pathlib import Path
 
 DATA_WIDTH = 16
 MODEL_DIM = 32
-SEQ_LEN = 8
+SEQ_LEN = 16
 NUM_HEADS = 8
 HEAD_DIM = 4
 HIDDEN_DIM = 128
