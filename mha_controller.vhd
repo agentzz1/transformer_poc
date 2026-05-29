@@ -454,26 +454,40 @@ begin
     ---------------------------------------------------------------------------
     -- Weight-memory address mapping  (combinational)
     --
-    -- For head-projection Q / K / V:
-    --   gemm_os B-port is (MODEL_DIM x HEAD_DIM) row-major.
-    --   b_addr = k * HEAD_DIM + n   (k in 0..MODEL_DIM-1, n in 0..HEAD_DIM-1)
+    -- PyTorch nn.Linear stores weights as [out_features, in_features] and
+    -- computes  Y = X @ W^T.  So the VHDL GEMM (which computes A @ B) must
+    -- read the TRANSPOSED weight element at every (k, n) request.
     --
-    --   Physical weight memory is (MODEL_DIM x MODEL_DIM) row-major.
-    --   For head H, columns [H*HEAD_DIM .. (H+1)*HEAD_DIM-1]:
-    --     w_addr = k * MODEL_DIM + H * HEAD_DIM + n
+    -- For head-projection Q / K / V:
+    --   gemm_os B-port requests element at flat index  b_addr = k*HEAD_DIM + n
+    --     k in 0..MODEL_DIM-1  (contraction / input dimension)
+    --     n in 0..HEAD_DIM-1   (output dimension for this head)
+    --
+    --   Physical weight memory is (MODEL_DIM x MODEL_DIM) row-major,
+    --   stored as WQ[out_row][in_col] = WQ[out_idx][in_idx].
+    --   The correct element to read is WQ^T[k][h*HD+n] = WQ[h*HD+n][k]:
+    --     w_phys = (head_idx * HEAD_DIM + n) * MODEL_DIM + k
     --
     -- For output-projection W_O:
-    --   gemm_os B-port is (MODEL_DIM x MODEL_DIM) -- direct match.
-    --   w_o_addr = b_addr  (passthrough)
+    --   gemm_os B-port requests b_addr = k*MODEL_DIM + n
+    --     k in 0..MODEL_DIM-1  (contraction dimension = concat dim)
+    --     n in 0..MODEL_DIM-1  (output dimension)
+    --
+    --   Correct element is WO^T[k][n] = WO[n][k]:
+    --     w_phys = n * MODEL_DIM + k
     --
     -- These are combinational so the external memory sees the correct
     -- address in the SAME cycle as gemm_os asserts _re.
     ---------------------------------------------------------------------------
     p_weight_map : process (all) is
-        variable v_b_flat : natural range 0 to MODEL_DIM * HEAD_DIM - 1;
-        variable v_k      : integer;
-        variable v_n      : integer;
-        variable v_w_phys : natural range 0 to MODEL_DIM * MODEL_DIM - 1;
+        variable v_b_flat  : natural range 0 to MODEL_DIM * HEAD_DIM - 1;
+        variable v_k       : integer;
+        variable v_n       : integer;
+        variable v_w_phys  : natural range 0 to MODEL_DIM * MODEL_DIM - 1;
+        variable v_ob_flat : natural range 0 to MODEL_DIM * MODEL_DIM - 1;
+        variable v_ok      : integer;
+        variable v_on      : integer;
+        variable v_ow_phys : natural range 0 to MODEL_DIM * MODEL_DIM - 1;
     begin
         -- Defaults: zero, read disabled
         w_q_addr <= (others => '0');
@@ -485,39 +499,43 @@ begin
         w_v_re   <= '0';
         w_o_re   <= '0';
 
-        -- Q projection
+        -- Q projection  (read WQ[h*HD+n][k] = WQ^T[k][h*HD+n])
         if state = ST_PROJ_Q and hd_gemm_b_re = '1' then
             v_b_flat  := to_integer(unsigned(hd_gemm_b_addr));
             v_k       := v_b_flat / HEAD_DIM;
             v_n       := v_b_flat mod HEAD_DIM;
-            v_w_phys  := v_k * MODEL_DIM + head_idx * HEAD_DIM + v_n;
+            v_w_phys  := (head_idx * HEAD_DIM + v_n) * MODEL_DIM + v_k;
             w_q_addr  <= std_logic_vector(to_unsigned(v_w_phys, AW_W_FULL));
             w_q_re    <= '1';
         end if;
 
-        -- K projection
+        -- K projection  (read WK[h*HD+n][k] = WK^T[k][h*HD+n])
         if state = ST_PROJ_K and hd_gemm_b_re = '1' then
             v_b_flat  := to_integer(unsigned(hd_gemm_b_addr));
             v_k       := v_b_flat / HEAD_DIM;
             v_n       := v_b_flat mod HEAD_DIM;
-            v_w_phys  := v_k * MODEL_DIM + head_idx * HEAD_DIM + v_n;
+            v_w_phys  := (head_idx * HEAD_DIM + v_n) * MODEL_DIM + v_k;
             w_k_addr  <= std_logic_vector(to_unsigned(v_w_phys, AW_W_FULL));
             w_k_re    <= '1';
         end if;
 
-        -- V projection
+        -- V projection  (read WV[h*HD+n][k] = WV^T[k][h*HD+n])
         if state = ST_PROJ_V and hd_gemm_b_re = '1' then
             v_b_flat  := to_integer(unsigned(hd_gemm_b_addr));
             v_k       := v_b_flat / HEAD_DIM;
             v_n       := v_b_flat mod HEAD_DIM;
-            v_w_phys  := v_k * MODEL_DIM + head_idx * HEAD_DIM + v_n;
+            v_w_phys  := (head_idx * HEAD_DIM + v_n) * MODEL_DIM + v_k;
             w_v_addr  <= std_logic_vector(to_unsigned(v_w_phys, AW_W_FULL));
             w_v_re    <= '1';
         end if;
 
-        -- Output projection  (W_O, direct passthrough)
+        -- Output projection  (read WO[n][k] = WO^T[k][n])
         if state = ST_OUTPUT_PROJ and out_gemm_b_re = '1' then
-            w_o_addr  <= out_gemm_b_addr;
+            v_ob_flat := to_integer(unsigned(out_gemm_b_addr));
+            v_ok      := v_ob_flat / MODEL_DIM;   -- contraction index k
+            v_on      := v_ob_flat mod MODEL_DIM; -- output index n
+            v_ow_phys := v_on * MODEL_DIM + v_ok;
+            w_o_addr  <= std_logic_vector(to_unsigned(v_ow_phys, AW_W_FULL));
             w_o_re    <= '1';
         end if;
     end process p_weight_map;

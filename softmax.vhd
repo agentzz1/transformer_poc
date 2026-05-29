@@ -41,7 +41,9 @@ architecture rtl of softmax is
     signal state : state_t := ST_IDLE;
 
     type data_array_t is array (0 to SEQ_LEN - 1) of signed(DATA_WIDTH - 1 downto 0);
-    type int_array_t is array (0 to SEQ_LEN - 1) of integer;
+    -- Range-constrained so Vivado sizes exp_buf as (DATA_WIDTH-1)-bit registers,
+    -- not 32-bit integers -- critical for keeping the ST_OUTPUT divider small.
+    type int_array_t is array (0 to SEQ_LEN - 1) of integer range 0 to I16_MAX;
     type exp_lut_t is array (0 to LUT_DEPTH - 1) of integer;
 
     function init_exp_lut return exp_lut_t is
@@ -62,7 +64,8 @@ architecture rtl of softmax is
     signal raw_buf     : data_array_t;
     signal exp_buf     : int_array_t := (others => 0);
     signal max_reg     : signed(DATA_WIDTH - 1 downto 0) := (others => '0');
-    signal sum_exp     : integer := 0;
+    -- Range-constrained: max = SEQ_LEN * I16_MAX  (e.g. 16*127=2032 → 11 bits)
+    signal sum_exp     : integer range 0 to SEQ_LEN * I16_MAX := 0;
     signal in_count    : integer range 0 to SEQ_LEN := 0;
     signal exp_count   : integer range 0 to SEQ_LEN := 0;
     signal out_count   : integer range 0 to SEQ_LEN := 0;
@@ -84,21 +87,26 @@ architecture rtl of softmax is
     function exp_q15_from_diff (
         diff : signed
     ) return integer is
-        variable diff_i  : integer;
-        variable mag_i   : integer;
-        variable scaled  : integer;
-        variable idx     : integer;
-        variable exp_q15 : integer;
+        -- Range constraints keep Vivado from expanding these to 32-bit,
+        -- drastically shrinking the combinational divider in ST_EXP.
+        variable diff_i  : integer;                                -- full range for compare
+        variable mag_val : integer;
+        variable mag_i   : integer range 0 to Q_SCALE;            -- capped to Q_SCALE
+        variable scaled  : integer range 0 to LUT_MAX_IDX;        -- 8-bit (0..255)
+        variable idx     : integer range 0 to LUT_MAX_IDX;        -- 8-bit LUT address
+        variable exp_val : integer;
+        variable exp_q15 : integer range 0 to I16_MAX;            -- output width
     begin
         diff_i := to_integer(diff);
         if diff_i >= 0 then
             return I16_MAX;
         end if;
 
-        mag_i := -diff_i;
-        if mag_i > Q_SCALE then
-            mag_i := Q_SCALE;
+        mag_val := -diff_i;
+        if mag_val > Q_SCALE then
+            mag_val := Q_SCALE;
         end if;
+        mag_i := mag_val;
 
         scaled := (mag_i * LUT_MAX_IDX) / (10 * Q_SCALE);
         if scaled > LUT_MAX_IDX then
@@ -106,10 +114,11 @@ architecture rtl of softmax is
         end if;
 
         idx := LUT_MAX_IDX - scaled;
-        exp_q15 := EXP_LUT_Q16(idx) / 2;
-        if exp_q15 > I16_MAX then
-            return I16_MAX;
+        exp_val := EXP_LUT_Q16(idx) / 512;   -- >>9 converts Q16 to Q7 (matches Python)
+        if exp_val > I16_MAX then
+            exp_val := I16_MAX;
         end if;
+        exp_q15 := exp_val;
 
         return exp_q15;
     end function;
@@ -118,8 +127,11 @@ begin
 
     p_ctrl : process (clk) is
         variable diff_v : signed(DATA_WIDTH downto 0);
-        variable exp_v  : integer;
-        variable prob_v : integer;
+        variable exp_v  : integer range 0 to I16_MAX;
+        -- prod_v width = (DATA_WIDTH-1) + log2(Q_SCALE) = 14 bits for DW=8
+        variable prod_v : integer range 0 to I16_MAX * Q_SCALE;
+        -- prob_v saturates to I16_MAX; range tells Vivado to size output narrowly
+        variable prob_v : integer range 0 to I16_MAX * Q_SCALE;
     begin
         if rising_edge(clk) then
             if rstn = '0' then
@@ -194,7 +206,12 @@ begin
                         if sum_exp <= 0 then
                             prob_v := Q_SCALE / SEQ_LEN;
                         else
-                            prob_v := (exp_buf(out_count) * Q_SCALE) / sum_exp;
+                            -- Use explicit intermediate so Vivado sees a narrow
+                            -- division: prod_v is (DATA_WIDTH-1)+log2(Q_SCALE) bits,
+                            -- sum_exp is log2(SEQ_LEN*I16_MAX) bits.  Much smaller
+                            -- carry chain than the default 32-bit integer divider.
+                            prod_v := exp_buf(out_count) * Q_SCALE;
+                            prob_v := prod_v / sum_exp;
                         end if;
 
                         o_data    <= std_logic_vector(sat16_int(prob_v));

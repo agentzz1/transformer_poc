@@ -36,7 +36,7 @@ architecture sim of tb_encoder_block is
     ---------------------------------------------------------------------------
     constant DATA_WIDTH : positive := 16;
     constant MODEL_DIM  : positive := 32;
-    constant SEQ_LEN    : positive := 8;
+    constant SEQ_LEN    : positive := 16;
     constant NUM_HEADS  : positive := 8;
     constant HEAD_DIM   : positive := 4;
     constant HIDDEN_DIM : positive := 128;

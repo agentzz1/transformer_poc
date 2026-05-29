@@ -78,16 +78,35 @@ architecture rtl of gemm_mm is
     ---------------------------------------------------------------------------
     -- FSM
     ---------------------------------------------------------------------------
-    type state_t is (ST_IDLE, ST_LOAD_C, ST_MAC, ST_OUTPUT, ST_DONE);
+    -- ST_INIT walks once over c_buf to zero it (one entry/cycle) so the array
+    -- doesn't need a synchronous wide reset; that lets Vivado infer BRAM
+    -- instead of a giant flip-flop array.
+    type state_t is (ST_IDLE, ST_INIT, ST_LOAD_C, ST_MAC, ST_OUTPUT, ST_DONE);
     signal state : state_t;
 
     ---------------------------------------------------------------------------
     -- C accumulator buffer (M x N)
+    --
+    -- Width sized for int8/int16 inputs: max |sum| = K * 2^(2*(DW-1))
+    --   DW=8,  K<=256:  needs 22 bits + sign  -> 24 bits comfortably
+    --   DW=16, K<=256:  needs 38 bits + sign  -> 40 bits comfortably
+    -- We pick max(24, 2*DW + clog2(K) + 4) so the buffer fits in BRAM rather
+    -- than burning thousands of flip-flops with a 64-bit width.
     ---------------------------------------------------------------------------
-    constant ACC_WIDTH : positive := 64;
+    function acc_width_calc return positive is
+        variable w : integer;
+    begin
+        w := 2 * DATA_WIDTH + clog2(K + 1) + 4;
+        if w < 24 then w := 24; end if;
+        return w;
+    end function;
+    constant ACC_WIDTH : positive := acc_width_calc;
     subtype accum_t is signed(ACC_WIDTH - 1 downto 0);
     type c_buf_t is array (0 to M * N - 1) of accum_t;
     signal c_buf : c_buf_t;
+
+    -- INIT-phase counter (zeros c_buf one entry per cycle)
+    signal init_cnt : integer range 0 to M * N := 0;
 
     ---------------------------------------------------------------------------
     -- MAC loop counters
@@ -95,6 +114,12 @@ architecture rtl of gemm_mm is
     signal mac_m : integer := 0;   -- output row
     signal mac_n : integer := 0;   -- output col
     signal mac_k : integer := 0;   -- inner dimension
+
+    -- Single accumulator register for the inner (k) loop.  Replaces a per-cycle
+    -- read-modify-write on c_buf (which Vivado mapped to async distributed RAM
+    -- and which then produced wrong results on real hardware).  c_buf is now
+    -- written only once per (m,n) at k = K-1.
+    signal mac_acc : accum_t := (others => '0');
 
     ---------------------------------------------------------------------------
     -- Pipelined read registers (addr/re in cycle N -> data in cycle N+1)
@@ -114,6 +139,14 @@ architecture rtl of gemm_mm is
     signal o_valid_r   : std_logic;
     signal o_last_r    : std_logic;
     signal o_channel_r : integer := 0;
+
+    ---------------------------------------------------------------------------
+    -- DSP-mapping hint for the combinational A*B multiply in p_fsm.
+    -- We don't pipeline-register it here (would shift the FSM by 1 cycle);
+    -- the attribute on the architecture lets Vivado decide DSP vs LUT.
+    ---------------------------------------------------------------------------
+    attribute use_dsp : string;
+    attribute use_dsp of rtl : architecture is "yes";
 
     ---------------------------------------------------------------------------
     -- Flat index helpers
@@ -196,11 +229,14 @@ begin
     begin
         if rising_edge(clk) then
             if rstn = '0' then
+                -- Note: c_buf is NOT reset here -- a wide reset prevents BRAM
+                -- inference. c_buf is zeroed sequentially in ST_INIT instead.
                 state     <= ST_IDLE;
                 mac_m     <= 0;
                 mac_n     <= 0;
                 mac_k     <= 0;
-                c_buf     <= (others => (others => '0'));
+                mac_acc   <= (others => '0');
+                init_cnt  <= 0;
                 o_data_r  <= (others => '0');
                 o_valid_r <= '0';
                 o_last_r  <= '0';
@@ -218,12 +254,25 @@ begin
                     -- IDLE: wait for start pulse
                     -----------------------------------------------------------
                     when ST_IDLE =>
-                        mac_m <= 0;
-                        mac_n <= 0;
-                        mac_k <= 0;
-                        c_buf <= (others => (others => '0'));
+                        mac_m    <= 0;
+                        mac_n    <= 0;
+                        mac_k    <= 0;
+                        init_cnt <= 0;
                         if start = '1' then
-                            state <= ST_LOAD_C;
+                            state <= ST_INIT;
+                        end if;
+
+                    -----------------------------------------------------------
+                    -- INIT: zero c_buf one entry per cycle (M*N cycles)
+                    -- Sequential single-port write -> BRAM-inferable.
+                    -----------------------------------------------------------
+                    when ST_INIT =>
+                        c_buf(init_cnt) <= (others => '0');
+                        if init_cnt = M * N - 1 then
+                            init_cnt <= 0;
+                            state    <= ST_LOAD_C;
+                        else
+                            init_cnt <= init_cnt + 1;
                         end if;
 
                     -----------------------------------------------------------
@@ -263,10 +312,19 @@ begin
                         if a_valid = '1' and b_valid = '1' then
                             v_product := signed(a_data) * signed(b_data);
                             v_idx     := mac_m * N + mac_n;
-                            v_acc     := c_buf(v_idx) + resize(v_product, ACC_WIDTH);
-                            c_buf(v_idx) <= v_acc;
+                            -- Accumulate in a single register across the k-loop.
+                            -- At k=0 start from the bias held in c_buf (loaded in
+                            -- ST_LOAD_C); afterwards add into mac_acc.  Write c_buf
+                            -- back ONCE at k=K-1.  No per-cycle RMW on c_buf.
+                            if mac_k = 0 then
+                                v_acc := c_buf(v_idx) + resize(v_product, ACC_WIDTH);
+                            else
+                                v_acc := mac_acc + resize(v_product, ACC_WIDTH);
+                            end if;
+                            mac_acc <= v_acc;
 
                             if mac_k = K - 1 then
+                                c_buf(v_idx) <= v_acc;
                                 mac_k <= 0;
                                 if mac_n = N - 1 then
                                     mac_n <= 0;

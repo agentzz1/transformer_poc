@@ -28,6 +28,9 @@ REM ---------------------------------------------------------------------------
 ghdl -a --workdir=work --std=08 clog2_pkg.vhd
 if %errorlevel% neq 0 goto ERROR
 
+ghdl -a --workdir=work --std=08 weights_pkg.vhd
+if %errorlevel% neq 0 goto ERROR
+
 ghdl -a --workdir=work --std=08 utilities.vhd
 if %errorlevel% neq 0 goto ERROR
 
