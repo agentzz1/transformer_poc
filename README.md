@@ -129,9 +129,104 @@ This streams the images over COM4 and verifies the final, physical **77.21% accu
 
 ---
 
-## 🎨 VHDL Block Diagram Architecture
+## 🎨 Hardware Architecture & Diagrams
 
-Below is the clean vector block schematic of the FPGA hardware architecture. The physical image is pushed directly to the project root directory as [vit_fpga_architecture.png](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/vit_fpga_architecture.png):
+To satisfy both high-level presentations and strict technical reviews, we provide two representations of our VHDL architecture:
+1. **The Technical Flowchart (Mermaid):** An "engineering-clean", interactive vector diagram showing exact signals, ports, and submodules.
+2. **The Hero Graphic (AI-Generated rendering):** A sleek, stylized visual overview of the accelerator.
+
+---
+
+### 1. Technical VHDL Flowchart (Mermaid)
+
+This vector flowchart is rendered dynamically by GitHub's markdown parser. It contains zero spelling artifacts, exact signal connections, color-coded legends, and is fully searchable:
+
+```mermaid
+graph TD
+    %% Define Styles & Classes
+    classDef cyan fill:#e0f7fa,stroke:#00acc1,stroke-width:2px,color:#006064;
+    classDef orange fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100;
+    classDef purple fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c;
+    classDef green fill:#e8f8f5,stroke:#16a085,stroke-width:2px,color:#117864;
+
+    %% Modules
+    Host[Host PC / UART Interface<br>115,200 baud]:::cyan
+    Top[basys3_top.vhd<br>Top-Level Wrapper<br>Clock Div to 50MHz / Resets]:::orange
+    FrontMem[frontend_mem.vhd<br>UART RX Buffer]:::cyan
+    WeightsROM[weights_pkg.vhd<br>Weight ROM & Constants]:::orange
+    
+    subgraph Frontend [Pixel & Patch Processing]
+        Embed[patch_embed.vhd<br>Patch Projection 16x7x7 -> 16x32]:::cyan
+    end
+    
+    subgraph Encoder [encoder_block.vhd - 1x Transformer Encoder]
+        LN1[layernorm.vhd<br>LayerNorm 1]:::purple
+        MHA[mha_controller.vhd<br>Multi-Head Self-Attention]:::purple
+        Softmax[softmax.vhd<br>exp-LUT Softmax]:::purple
+        Res1[residual_add.vhd<br>Residual Add 1]:::purple
+        LN2[layernorm.vhd<br>LayerNorm 2]:::purple
+        FFN[ffn.vhd<br>Feed-Forward Network]:::purple
+        GELU[psum_activation.vhd<br>GELU LUT]:::purple
+        Res2[residual_add.vhd<br>Residual Add 2]:::purple
+    end
+
+    subgraph Compute [Physical DSP GEMM Engines]
+        GEMM_OS[gemm_os.vhd<br>Int8 OS Systolic Array]:::orange
+        GEMM_MM[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
+    end
+
+    subgraph Backend [Output Classification]
+        Classifier[classifier.vhd<br>Global Average Pooling]:::green
+        FC[Classifier FC Proj<br>Logits 32 -> 10]:::green
+        Argmax[Argmax Comparator<br>Selects Class 0-9]:::green
+    end
+
+    Display[4-Digit 7-Segment Display]:::green
+    Ack[prediction / done_ack]:::green
+
+    %% Connections
+    Host -->|pixel_in| Top
+    Top -->|RAW pixel bytes| FrontMem
+    FrontMem --> Embed
+    WeightsROM -->|Projection weights| Embed
+    WeightsROM -.->|ROM values| Encoder
+    WeightsROM -.->|ROM values| Classifier
+
+    Embed -->|Tokens x + PosEmbed| LN1
+    
+    %% Encoder internal pipeline
+    LN1 --> MHA
+    MHA -->|Attn Context| Res1
+    Embed -->|Skip x| Res1
+    Res1 --> LN2
+    LN2 --> FFN
+    FFN -->|FFN features| Res2
+    Res1 -->|Skip intermediate| Res2
+    
+    %% Compute core relations
+    MHA <-->|Parallel matrix multiplies| GEMM_OS
+    FFN <-->|Sequential projections| GEMM_MM
+    
+    %% Nested sub-blocks
+    MHA -.-> Softmax
+    FFN -.-> GELU
+
+    %% Backend pipeline
+    Res2 -->|16 Tokens| Classifier
+    Classifier --> FC
+    FC --> Argmax
+    Argmax -->|prediction| Display
+    Argmax -->|prediction / done_ack| Ack
+    Ack --> Host
+```
+
+* **Legend:** **Cyan** = Activation/Pixel Data | **Orange** = Weights/ROM Access | **Green** = Prediction/Output | **Purple** = Control/Status / Encoder logic.
+
+---
+
+### 2. Stylized Visual Block Diagram (Hero Graphic)
+
+For slides, portfolios, or LinkedIn, below is the vector-styled visual rendering of the accelerator architecture. The physical image is pushed to the root directory as [vit_fpga_architecture.png](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/vit_fpga_architecture.png):
 
 ![ViT FPGA Block Diagram Architecture](vit_fpga_architecture.png)
 
