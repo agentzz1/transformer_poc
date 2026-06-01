@@ -276,7 +276,15 @@ graph TD
 
 ---
 
-### 2. Stylized Visual Block Diagram (Hero Graphic)
+### 2. High-Fidelity Vector Schematic (SVG)
+
+For research reports and publications, this high-fidelity SVG diagram represents the precise dataflow, clock domains, weights ROM access, control pathways, and internal SRAM replay buffers. It is fully responsive, razor-sharp at any zoom level, and styled in a premium engineering dark-mode:
+
+![VHDL Architecture Detail Vector Schematic](vhdl_architecture_detail.svg)
+
+---
+
+### 3. Stylized Visual Block Diagram (Hero Graphic)
 
 For slides, portfolios, or LinkedIn, below is the vector-styled visual rendering of the accelerator architecture. The physical image is pushed to the root directory as [vit_fpga_architecture.png](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/vit_fpga_architecture.png):
 

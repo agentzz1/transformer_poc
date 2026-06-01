@@ -1,0 +1,370 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1780" width="100%" height="100%">
+  <defs>
+    <!-- Background Grid Pattern -->
+    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#1e293b" stroke-width="1" />
+    </pattern>
+
+    <!-- Drop Shadows for Cards -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#020617" flood-opacity="0.6" />
+    </filter>
+    <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="grad-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#0891b2" />
+    </linearGradient>
+    <linearGradient id="grad-orange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+    <linearGradient id="grad-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#9333ea" />
+    </linearGradient>
+    <linearGradient id="grad-green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="100%" stop-color="#16a34a" />
+    </linearGradient>
+    <linearGradient id="grad-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+    <linearGradient id="grad-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Arrow Markers -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748b" />
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3b82f6" />
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ea580c" />
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#16a34a" />
+    </marker>
+  </defs>
+
+  <!-- Solid Background & High-Tech Grid -->
+  <rect width="100%" height="100%" fill="#0b0f19" />
+  <rect width="100%" height="100%" fill="url(#grid)" opacity="0.7" />
+
+  <!-- HEADER -->
+  <g transform="translate(50, 40)">
+    <text x="0" y="0" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="800" fill="#f8fafc" letter-spacing="1">
+      MNIST ViT hardware processor architecture
+    </text>
+    <text x="0" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" fill="#64748b">
+      Detailed register-transfer-level (RTL) schematic of the pipelined VHDL-2008 design
+    </text>
+    <line x1="0" y1="40" x2="900" y2="40" stroke="#1e293b" stroke-width="2" />
+  </g>
+
+  <!-- ========================================== -->
+  <!-- LEVEL 0: Host and outer IO (Y: 120-220)    -->
+  <!-- ========================================== -->
+  
+  <!-- Host PC Node -->
+  <g transform="translate(400, 110)" filter="url(#shadow)">
+    <rect width="200" height="60" rx="8" fill="url(#grad-cyan)" />
+    <text x="100" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">Host PC / Interface</text>
+    <text x="100" y="44" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#073b4c" text-anchor="middle">UART @ 115,200 baud</text>
+  </g>
+
+  <!-- basys3_top.vhd (Outer Wrapper) Container -->
+  <rect x="50" y="210" width="900" height="130" rx="12" fill="url(#grad-dark)" stroke="#334155" stroke-dasharray="6,6" stroke-width="2" />
+  <text x="70" y="235" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#64748b">basys3_top.vhd (FPGA Top Wrapper)</text>
+
+  <!-- basys3_top Submodules -->
+  <g transform="translate(80, 255)" filter="url(#shadow)">
+    <rect width="240" height="60" rx="8" fill="#1e293b" stroke="#f97316" stroke-width="1.5" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#f8fafc" text-anchor="middle">Clock Div &amp; Reset FSM</text>
+    <text x="120" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#64748b" text-anchor="middle">100MHz PLL -> 50MHz Active Clk</text>
+  </g>
+
+  <g transform="translate(380, 255)" filter="url(#shadow)">
+    <rect width="240" height="60" rx="8" fill="#1e293b" stroke="#06b6d4" stroke-width="1.5" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#f8fafc" text-anchor="middle">frontend_mem.vhd</text>
+    <text x="120" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#64748b" text-anchor="middle">784-byte Pixel Buffer (SRAM)</text>
+  </g>
+
+  <g transform="translate(680, 255)" filter="url(#shadow)">
+    <rect width="240" height="60" rx="8" fill="#1e293b" stroke="#f97316" stroke-width="1.5" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#f8fafc" text-anchor="middle">weights_pkg.vhd</text>
+    <text x="120" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#64748b" text-anchor="middle">Weights &amp; Biases ROM (Q1.7)</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- LEVEL 1: Frontend (Y: 380-460)            -->
+  <!-- ========================================== -->
+  <g transform="translate(380, 380)" filter="url(#shadow)">
+    <rect width="240" height="70" rx="8" fill="#1e293b" stroke="#06b6d4" stroke-width="1.5" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="800" fill="#06b6d4" text-anchor="middle">patch_embed.vhd</text>
+    <text x="120" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#f8fafc" text-anchor="middle">Patch Projector &amp; Embedder</text>
+    <text x="120" y="58" font-family="system-ui, -apple-system, sans-serif" font-size="9" font-weight="500" fill="#64748b" text-anchor="middle">16 Patches (7x7) -> 16x32 Tokens</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- LEVEL 2: Encoder Block (Y: 490-1360)       -->
+  <!-- ========================================== -->
+  
+  <!-- Outer Container for encoder_block.vhd -->
+  <rect x="50" y="490" width="900" height="850" rx="16" fill="#111827" stroke="#4b5563" stroke-width="2" />
+  <text x="70" y="515" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="800" fill="#f8fafc">
+    encoder_block.vhd <tspan font-size="11" font-weight="500" fill="#64748b">(Structural Transformer Encoder Block)</tspan>
+  </text>
+
+  <!-- Central FSM Coordinator (control_unit.vhd) -->
+  <g transform="translate(680, 540)" filter="url(#shadow)">
+    <rect width="240" height="70" rx="8" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1.5" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#60a5fa" text-anchor="middle">control_unit.vhd</text>
+    <text x="120" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#f8fafc" text-anchor="middle">Central FSM Coordinator</text>
+    <text x="120" y="56" font-family="system-ui, -apple-system, sans-serif" font-size="9" font-weight="500" fill="#93c5fd" text-anchor="middle">Manages Replay Buffers &amp; sublayers</text>
+  </g>
+
+  <!-- input_buffer SRAM (Skip Connection 1) -->
+  <g transform="translate(80, 560)" filter="url(#shadow)">
+    <rect width="240" height="60" rx="8" fill="#1e293b" stroke="#2563eb" stroke-width="1.5" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#3b82f6" text-anchor="middle">input_buffer (SRAM)</text>
+    <text x="120" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">Caches 16x32 Tokens for Skip 1</text>
+  </g>
+
+  <!-- MHA_Block Subgraph Container -->
+  <rect x="350" y="550" width="300" height="150" rx="10" fill="#1e1b4b" stroke="#4f46e5" stroke-width="1" />
+  <text x="365" y="570" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#818cf8">Multi-Head Self-Attention sublayer</text>
+
+  <!-- mha_controller.vhd -->
+  <g transform="translate(380, 585)" filter="url(#shadow)">
+    <rect width="240" height="40" rx="6" fill="#311042" stroke="#a855f7" stroke-width="1" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#d8b4fe" text-anchor="middle">mha_controller.vhd</text>
+  </g>
+
+  <!-- mha sub-elements -->
+  <g transform="translate(380, 640)" filter="url(#shadow)">
+    <rect width="115" height="45" rx="6" fill="#3a1c02" stroke="#ea580c" stroke-width="1" />
+    <text x="57" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#fdba74" text-anchor="middle">gemm_mm.vhd</text>
+    <text x="57" y="34" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="500" fill="#f8fafc" text-anchor="middle">Sequential MAC</text>
+  </g>
+
+  <g transform="translate(505, 640)" filter="url(#shadow)">
+    <rect width="115" height="45" rx="6" fill="#3b0764" stroke="#a855f7" stroke-width="1" />
+    <text x="57" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#d8b4fe" text-anchor="middle">softmax.vhd</text>
+    <text x="57" y="34" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="500" fill="#f8fafc" text-anchor="middle">exp-LUT ROM</text>
+  </g>
+
+  <!-- mha_buffer SRAM -->
+  <g transform="translate(380, 720)" filter="url(#shadow)">
+    <rect width="240" height="50" rx="8" fill="#1e293b" stroke="#2563eb" stroke-width="1.5" />
+    <text x="120" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#3b82f6" text-anchor="middle">mha_buffer (SRAM)</text>
+    <text x="120" y="36" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">Caches Attention outputs</text>
+  </g>
+
+  <!-- ResAdd_1 (Post-LN Residual 1) Subgraph Container -->
+  <rect x="350" y="795" width="300" height="135" rx="10" fill="#2d0f3d" stroke="#86198f" stroke-width="1" />
+  <text x="365" y="815" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#f5d0fe">Post-LN Residual &amp; LayerNorm 1</text>
+
+  <!-- u_res1 inside ResAdd_1 -->
+  <g transform="translate(380, 830)" filter="url(#shadow)">
+    <rect width="240" height="35" rx="6" fill="#4d0752" stroke="#c084fc" stroke-width="1" />
+    <text x="120" y="21" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="800" fill="#f5d0fe" text-anchor="middle">residual_add.vhd (Add elements)</text>
+  </g>
+
+  <!-- u_layernorm inside ResAdd_1 -->
+  <g transform="translate(380, 875)" filter="url(#shadow)">
+    <rect width="240" height="40" rx="6" fill="#4d0752" stroke="#c084fc" stroke-width="1" />
+    <text x="120" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="800" fill="#f5d0fe" text-anchor="middle">layernorm.vhd</text>
+    <text x="120" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="500" fill="#e9d5ff" text-anchor="middle">Multiplier-free LOD Shift-LN 1</text>
+  </g>
+
+  <!-- res1_buffer SRAM (Skip Connection 2 & FFN Input) -->
+  <g transform="translate(80, 945)" filter="url(#shadow)">
+    <rect width="240" height="60" rx="8" fill="#1e293b" stroke="#2563eb" stroke-width="1.5" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#3b82f6" text-anchor="middle">res1_buffer (SRAM)</text>
+    <text x="120" y="42" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">Caches LN1 outputs for FFN / Skip 2</text>
+  </g>
+
+  <!-- FFN_Block Subgraph Container -->
+  <rect x="350" y="945" width="300" height="150" rx="10" fill="#1e1b4b" stroke="#4f46e5" stroke-width="1" />
+  <text x="365" y="965" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#818cf8">Feed-Forward Network sublayer</text>
+
+  <!-- ffn.vhd -->
+  <g transform="translate(380, 980)" filter="url(#shadow)">
+    <rect width="240" height="40" rx="6" fill="#311042" stroke="#a855f7" stroke-width="1" />
+    <text x="120" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#d8b4fe" text-anchor="middle">ffn.vhd</text>
+  </g>
+
+  <!-- ffn sub-elements -->
+  <g transform="translate(380, 1035)" filter="url(#shadow)">
+    <rect width="115" height="45" rx="6" fill="#3a1c02" stroke="#ea580c" stroke-width="1" />
+    <text x="57" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#fdba74" text-anchor="middle">gemm_mm.vhd</text>
+    <text x="57" y="34" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="500" fill="#f8fafc" text-anchor="middle">Sequential MAC</text>
+  </g>
+
+  <g transform="translate(505, 1035)" filter="url(#shadow)">
+    <rect width="115" height="45" rx="6" fill="#3b0764" stroke="#a855f7" stroke-width="1" />
+    <text x="57" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#d8b4fe" text-anchor="middle">psum_activation.vhd</text>
+    <text x="57" y="34" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="500" fill="#f8fafc" text-anchor="middle">GELU ROM LUT</text>
+  </g>
+
+  <!-- ffn_buffer SRAM -->
+  <g transform="translate(380, 1115)" filter="url(#shadow)">
+    <rect width="240" height="50" rx="8" fill="#1e293b" stroke="#2563eb" stroke-width="1.5" />
+    <text x="120" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#3b82f6" text-anchor="middle">ffn_buffer (SRAM)</text>
+    <text x="120" y="36" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#94a3b8" text-anchor="middle">Caches FFN outputs</text>
+  </g>
+
+  <!-- ResAdd_2 (Post-LN Residual 2) Subgraph Container -->
+  <rect x="350" y="1185" width="300" height="135" rx="10" fill="#2d0f3d" stroke="#86198f" stroke-width="1" />
+  <text x="365" y="1205" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#f5d0fe">Post-LN Residual &amp; LayerNorm 2</text>
+
+  <!-- u_res2 inside ResAdd_2 -->
+  <g transform="translate(380, 1220)" filter="url(#shadow)">
+    <rect width="240" height="35" rx="6" fill="#4d0752" stroke="#c084fc" stroke-width="1" />
+    <text x="120" y="21" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="800" fill="#f5d0fe" text-anchor="middle">residual_add.vhd (Add elements)</text>
+  </g>
+
+  <!-- u_layernorm inside ResAdd_2 -->
+  <g transform="translate(380, 1265)" filter="url(#shadow)">
+    <rect width="240" height="40" rx="6" fill="#4d0752" stroke="#c084fc" stroke-width="1" />
+    <text x="120" y="20" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="800" fill="#f5d0fe" text-anchor="middle">layernorm.vhd</text>
+    <text x="120" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="500" fill="#e9d5ff" text-anchor="middle">Multiplier-free LOD Shift-LN 2</text>
+  </g>
+
+
+  <!-- ========================================== -->
+  <!-- LEVEL 3: Backend (Y: 1370-1550)           -->
+  <!-- ========================================== -->
+  <rect x="320" y="1370" width="360" height="200" rx="12" fill="url(#grad-dark)" stroke="#334155" stroke-dasharray="6,6" stroke-width="2" />
+  <text x="340" y="1395" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#64748b">classifier.vhd (Output Classification)</text>
+
+  <!-- classifier sub-modules -->
+  <g transform="translate(350, 1415)" filter="url(#shadow)">
+    <rect width="300" height="35" rx="6" fill="#064e3b" stroke="#10b981" stroke-width="1.2" />
+    <text x="150" y="21" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#f8fafc" text-anchor="middle">Global Average Pooling (GAP) on 16 Tokens</text>
+  </g>
+  
+  <g transform="translate(350, 1460)" filter="url(#shadow)">
+    <rect width="300" height="35" rx="6" fill="#064e3b" stroke="#10b981" stroke-width="1.2" />
+    <text x="150" y="21" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#f8fafc" text-anchor="middle">Linear Projection (32 -> 10 logits)</text>
+  </g>
+
+  <g transform="translate(350, 1505)" filter="url(#shadow)">
+    <rect width="300" height="35" rx="6" fill="#064e3b" stroke="#10b981" stroke-width="1.2" />
+    <text x="150" y="21" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#f8fafc" text-anchor="middle">Argmax Selector (Class 0-9)</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- LEVEL 4: Display / Output (Y: 1600-1670)   -->
+  <!-- ========================================== -->
+  <g transform="translate(200, 1610)" filter="url(#shadow)">
+    <rect width="260" height="50" rx="8" fill="url(#grad-green)" />
+    <text x="130" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#062f1c" text-anchor="middle">4-Digit 7-Segment Display</text>
+    <text x="130" y="38" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#0f5132" text-anchor="middle">Shows predicted digit physically</text>
+  </g>
+
+  <g transform="translate(540, 1610)" filter="url(#shadow)">
+    <rect width="260" height="50" rx="8" fill="url(#grad-green)" />
+    <text x="130" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#062f1c" text-anchor="middle">Host UART / Ack response</text>
+    <text x="130" y="38" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" fill="#0f5132" text-anchor="middle">Verifies 10,000 exact test files</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- CONNECTIONS & ROUTING                      -->
+  <!-- ========================================== -->
+  
+  <!-- Main Dataflow Pipeline (Cyan/Green arrows) -->
+  <path d="M 500,170 L 500,210" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M 500,270" fill="none" />
+  <path d="M 500,315 L 500,380" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M 500,450 L 500,550" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  
+  <!-- Embedding to input_buffer skip -->
+  <path d="M 380,415 H 200 V 560" stroke="#2563eb" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow-blue)" />
+  
+  <!-- Inside MHA -->
+  <path d="M 500,625 L 500,640" stroke="#a855f7" stroke-width="1.5" />
+  <path d="M 437,685 V 702 H 500 V 720" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrow)" />
+  <path d="M 562,685 V 702 H 500" stroke="#a855f7" stroke-width="1.5" />
+
+  <!-- MHA to mha_buffer -->
+  <path d="M 500,700 L 500,720" stroke="#06b6d4" stroke-width="2" />
+  
+  <!-- Buffers into ResAdd_1 -->
+  <path d="M 500,770 L 500,795" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M 200,620 V 815 H 350" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" />
+  
+  <!-- ResAdd_1 to res1_buffer -->
+  <path d="M 500,915 V 930 H 200 V 945" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" />
+  <!-- ResAdd_1 to FFN -->
+  <path d="M 500,915 L 500,945" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <!-- Inside FFN -->
+  <path d="M 500,1020 L 500,1035" stroke="#a855f7" stroke-width="1.5" />
+  <path d="M 437,1080 V 1098 H 500 V 1115" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrow)" />
+  <path d="M 562,1080 V 1098 H 500" stroke="#a855f7" stroke-width="1.5" />
+
+  <!-- FFN to ffn_buffer -->
+  <path d="M 500,1080 L 500,1115" stroke="#06b6d4" stroke-width="2" />
+
+  <!-- Buffers into ResAdd_2 -->
+  <path d="M 500,1165 L 500,1185" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M 200,1005 V 1205 H 350" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" />
+
+  <!-- ResAdd_2 out to classifier -->
+  <path d="M 500,1320 L 500,1370" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <!-- Backend to Outputs -->
+  <path d="M 500,1570 V 1590 H 330 V 1610" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)" />
+  <path d="M 500,1570 V 1590 H 670 V 1610" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)" />
+  <path d="M 670,1660 V 1675 H 920 V 140 H 600" stroke="#64748b" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)" />
+
+  <!-- ROM Weight Distribution (Dashed Orange) -->
+  <path d="M 800,315 V 360 H 635" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
+  <path d="M 800,315 V 600 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
+  <path d="M 800,315 V 995 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
+  <path d="M 800,315 V 1480 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
+
+  <!-- Control Coordinator Dashed Lines (Blue) -->
+  <path d="M 680,575 H 605" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
+  <path d="M 680,575 V 847 H 585" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
+  <path d="M 680,575 V 995 H 605" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
+  <path d="M 680,575 V 1238 H 580" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
+
+  <!-- ========================================== -->
+  <!-- LEGEND (Y: 1700-1760)                      -->
+  <!-- ========================================== -->
+  <g transform="translate(50, 1690)">
+    <rect width="900" height="60" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+    <text x="20" y="24" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#94a3b8">LEGEND:</text>
+    
+    <!-- Legend Item 1 -->
+    <rect x="90" y="14" width="16" height="16" rx="4" fill="url(#grad-cyan)" />
+    <text x="114" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#f8fafc">Data / Activation flow</text>
+    
+    <!-- Legend Item 2 -->
+    <rect x="290" y="14" width="16" height="16" rx="4" fill="url(#grad-blue)" />
+    <text x="314" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#f8fafc">Buffers &amp; Coordinator</text>
+    
+    <!-- Legend Item 3 -->
+    <rect x="490" y="14" width="16" height="16" rx="4" fill="url(#grad-purple)" />
+    <text x="514" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#f8fafc">RTL Logic / Sublayers</text>
+    
+    <!-- Legend Item 4 -->
+    <rect x="670" y="14" width="16" height="16" rx="4" fill="url(#grad-orange)" />
+    <text x="694" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#f8fafc">Pre-compiled Weights</text>
+    
+    <!-- Legend Item 5 -->
+    <rect x="830" y="14" width="16" height="16" rx="4" fill="url(#grad-green)" />
+    <text x="854" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#f8fafc">System Output</text>
+  </g>
+</svg>
