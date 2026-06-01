@@ -158,8 +158,9 @@ graph TD
     classDef orange fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100;
     classDef purple fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c;
     classDef green fill:#e8f8f5,stroke:#16a085,stroke-width:2px,color:#117864;
+    classDef blue fill:#e8f4f8,stroke:#2980b9,stroke-width:2px,color:#1b4f72;
 
-    %% Nodes
+    %% Global Nodes
     Host[Host PC / UART Interface<br>115,200 baud]:::cyan
     Display[4-Digit 7-Segment Display]:::green
     Ack[prediction / done_ack]:::green
@@ -175,24 +176,39 @@ graph TD
     end
 
     subgraph Encoder [encoder_block.vhd - Transformer Encoder]
-        LN1[layernorm.vhd<br>LayerNorm 1]:::purple
-        
+        %% Control
+        CU[control_unit.vhd<br>Central FSM Coordinator]:::blue
+
+        %% Local SRAM Buffers for data decoupling and replay
+        subgraph SRAM_Buffers [Internal SRAM Buffers]
+            input_buf[input_buffer<br>Stores Skip 1 Connection]:::blue
+            mha_buf[mha_buffer<br>Stores Attention Outputs]:::blue
+            res1_buf[res1_buffer<br>Stores Skip 2 & FFN Input]:::blue
+            ffn_buf[ffn_buffer<br>Stores FFN Outputs]:::blue
+        end
+
+        %% Sublayers
         subgraph MHA_Block [Multi-Head Self-Attention]
             MHA[mha_controller.vhd]:::purple
-            GEMM_MM1[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
+            GEMM_MM1[gemm_mm.vhd<br>Sequential MAC GEMM<br>Q / K / V / O Projections]:::orange
             Softmax[softmax.vhd<br>exp-LUT Softmax]:::purple
         end
         
-        Res1[residual_add.vhd<br>Residual Add 1]:::purple
-        LN2[layernorm.vhd<br>LayerNorm 2]:::purple
+        subgraph ResAdd_1 [Post-LN Residual block 1]
+            Res1[residual_add.vhd<br>Add Elements]:::purple
+            LN1[layernorm.vhd<br>Multiplier-Free LayerNorm 1]:::purple
+        end
         
         subgraph FFN_Block [Feed-Forward Network]
             FFN[ffn.vhd]:::purple
-            GEMM_MM2[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
+            GEMM_MM2[gemm_mm.vhd<br>Sequential MAC GEMM<br>FC1 / FC2 Projections]:::orange
             GELU[psum_activation.vhd<br>GELU LUT]:::purple
         end
-        
-        Res2[residual_add.vhd<br>Residual Add 2]:::purple
+
+        subgraph ResAdd_2 [Post-LN Residual block 2]
+            Res2[residual_add.vhd<br>Add Elements]:::purple
+            LN2[layernorm.vhd<br>Multiplier-Free LayerNorm 2]:::purple
+        end
     end
 
     subgraph Backend [Output Classification]
@@ -201,7 +217,7 @@ graph TD
         Argmax[Argmax Comparator<br>Selects Class 0-9]:::green
     end
 
-    %% Connections
+    %% Flow connections
     Host -->|pixel_in| Top
     Top -->|RAW bytes| FrontMem
     FrontMem --> Embed
@@ -210,32 +226,47 @@ graph TD
     WeightsROM -.->|Layer weights| Encoder
     WeightsROM -.->|Classifier weights| Classifier
 
-    Embed -->|Tokens x + PosEmbed| LN1
+    %% Encoder Routing
+    Embed -->|Tokens x| MHA
+    Embed -->|Tokens x| input_buf
     
-    %% Encoder Pipeline
-    LN1 --> MHA
+    %% MHA Internal
     MHA <--> GEMM_MM1
     MHA -.-> Softmax
+    MHA -->|Attn Context| mha_buf
     
-    MHA -->|Attn Context| Res1
-    Embed -->|Skip x| Res1
+    %% ResAdd 1
+    mha_buf -->|Replay Main| Res1
+    input_buf -->|Replay Skip| Res1
+    Res1 --> LN1
+    LN1 -->|LN output| res1_buf
     
-    Res1 --> LN2
-    LN2 --> FFN
+    %% FFN Internal
+    res1_buf -->|Replay Main| FFN
     FFN <--> GEMM_MM2
     FFN -.-> GELU
+    FFN -->|FFN features| ffn_buf
     
-    FFN -->|FFN features| Res2
-    Res1 -->|Skip intermediate| Res2
+    %% ResAdd 2
+    ffn_buf -->|Replay Main| Res2
+    res1_buf -->|Replay Skip| Res2
+    Res2 --> LN2
     
-    %% Backend Pipeline
-    Res2 -->|16 Tokens| Classifier
+    %% Backend Routing
+    LN2 -->|16 Tokens| Classifier
     Classifier --> FC
     FC --> Argmax
     
     Argmax -->|prediction| Display
     Argmax -->|prediction / done_ack| Ack
     Ack --> Host
+
+    %% Control Lines (conceptual)
+    CU -.->|Orchestrates| MHA_Block
+    CU -.->|Orchestrates| SRAM_Buffers
+    CU -.->|Orchestrates| ResAdd_1
+    CU -.->|Orchestrates| FFN_Block
+    CU -.->|Orchestrates| ResAdd_2
 ```
 
 * **Legend:** **Cyan** = Activation/Pixel Data | **Orange** = Weights/ROM Access | **Green** = Prediction/Output | **Purple** = Control/Status / Encoder logic.
