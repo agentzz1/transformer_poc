@@ -73,11 +73,12 @@ Output Prediction (7-Segment Display / UART)
 | **[psum_activation.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/psum_activation.vhd)** | GELU LUT | Simulates standard GELU activation in a single clock cycle using a pre-calculated 256-byte ROM Lookup Table (`GELU_LUT_I8`). |
 | **[mha_controller.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/mha_controller.vhd)** | Self-Attention | Sequences key, query, and value matrix multiplications, computes attention score dot-products, applies Softmax, and outputs the final projected sequence. |
 | **[ffn.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/ffn.vhd)** | Feed-Forward | Implements the FFN: $FC1$ ($32 \rightarrow 64$), GELU activation, and $FC2$ ($64 \rightarrow 32$). |
+| **[gemm_mm.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_mm.vhd)** | active GEMM Engine | **The actual compute core.** Implements a sequential, memory-mapped Multiply-Accumulate (MAC) matrix multiplier. It sequentially sequences calculations over $M \times N \times K$ cycles using highly optimized internal DSP blocks, keeping LUT utilization extremely low. |
 | **[classifier.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/classifier.vhd)** | Output Classifier | Conducts Global Average Pooling (GAP) over 16 tokens, executes the final GEMM with the classifier's weights/biases, and runs a strict-greater `argmax` to output the final class (0-9). |
-| **[gemm_os.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_os.vhd)** | Systolic Engine | High-throughput Output-Stationary Systolic Array matrix multiplication module. |
-| **[gemm_os_adapter.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_os_adapter.vhd)** | GEMM Adapter | Formats, buffers, and distributes weight matrices and activations into the systolic array core. |
 | **[seg_test.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/seg_test.vhd)** | 7-Segment Multiplexer | Dynamically controls the 4-digit display on the Basys 3 board to display the currently predicted digit. |
 | **[control_unit.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/control_unit.vhd)** | Controller FSM | Central Finite State Machine that orchestrates the execution states, address generation, RAM writes, and pipelines. |
+| *[gemm_os.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_os.vhd)* | Concept Only (Unused) | Leftover reference implementation of an Output-Stationary Systolic Array. Not instantiated in the active hardware design. |
+| *[gemm_os_adapter.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_os_adapter.vhd)* | Concept Only (Unused) | Leftover reference adapter for the systolic array. Not instantiated in the active hardware design. |
 
 ---
 
@@ -178,7 +179,7 @@ graph TD
         
         subgraph MHA_Block [Multi-Head Self-Attention]
             MHA[mha_controller.vhd]:::purple
-            GEMM_OS[gemm_os.vhd<br>Int8 OS Systolic Array]:::orange
+            GEMM_MM1[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
             Softmax[softmax.vhd<br>exp-LUT Softmax]:::purple
         end
         
@@ -187,7 +188,7 @@ graph TD
         
         subgraph FFN_Block [Feed-Forward Network]
             FFN[ffn.vhd]:::purple
-            GEMM_MM[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
+            GEMM_MM2[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
             GELU[psum_activation.vhd<br>GELU LUT]:::purple
         end
         
@@ -213,7 +214,7 @@ graph TD
     
     %% Encoder Pipeline
     LN1 --> MHA
-    MHA <--> GEMM_OS
+    MHA <--> GEMM_MM1
     MHA -.-> Softmax
     
     MHA -->|Attn Context| Res1
@@ -221,7 +222,7 @@ graph TD
     
     Res1 --> LN2
     LN2 --> FFN
-    FFN <--> GEMM_MM
+    FFN <--> GEMM_MM2
     FFN -.-> GELU
     
     FFN -->|FFN features| Res2
