@@ -20,6 +20,15 @@ The entire MNIST test set of 10,000 images was evaluated on the physical Basys 3
 > [!NOTE]
 > This is a massive leap over the initial baseline design (which scored **68%** accuracy and suffered from severe quantization clipping and LayerNorm gradient mismatch!). 
 
+### FPGA Resource Utilization (xc7a35tcpg236-1)
+
+| Resource | Used | Available | Utilization % |
+|----------|------|-----------|---------------|
+| **Slice LUTs** | 18,523 | 20,800 | 89.05% |
+| **Slice Registers** | 27,245 | 41,600 | 65.49% |
+| **Block RAM (BRAM18)** | 6 | 100 | 6.00% |
+| **DSPs** | 34 | 90 | 37.78% |
+
 ---
 
 ## 🏗️ Hardware Architecture & VHDL Sources
@@ -149,30 +158,40 @@ graph TD
     classDef purple fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c;
     classDef green fill:#e8f8f5,stroke:#16a085,stroke-width:2px,color:#117864;
 
-    %% Modules
+    %% Nodes
     Host[Host PC / UART Interface<br>115,200 baud]:::cyan
-    Top[basys3_top.vhd<br>Top-Level Wrapper<br>Clock Div to 50MHz / Resets]:::orange
-    FrontMem[frontend_mem.vhd<br>UART RX Buffer]:::cyan
-    WeightsROM[weights_pkg.vhd<br>Weight ROM & Constants]:::orange
-    
+    Display[4-Digit 7-Segment Display]:::green
+    Ack[prediction / done_ack]:::green
+
+    subgraph TopLevel [FPGA Wrapper: basys3_top.vhd]
+        Top[Clock Div & UART Control]:::orange
+        FrontMem[frontend_mem.vhd<br>UART RX Buffer]:::cyan
+        WeightsROM[weights_pkg.vhd<br>Pre-compiled ROM]:::orange
+    end
+
     subgraph Frontend [Pixel & Patch Processing]
         Embed[patch_embed.vhd<br>Patch Projection 16x7x7 -> 16x32]:::cyan
     end
-    
-    subgraph Encoder [encoder_block.vhd - 1x Transformer Encoder]
+
+    subgraph Encoder [encoder_block.vhd - Transformer Encoder]
         LN1[layernorm.vhd<br>LayerNorm 1]:::purple
-        MHA[mha_controller.vhd<br>Multi-Head Self-Attention]:::purple
-        Softmax[softmax.vhd<br>exp-LUT Softmax]:::purple
+        
+        subgraph MHA_Block [Multi-Head Self-Attention]
+            MHA[mha_controller.vhd]:::purple
+            GEMM_OS[gemm_os.vhd<br>Int8 OS Systolic Array]:::orange
+            Softmax[softmax.vhd<br>exp-LUT Softmax]:::purple
+        end
+        
         Res1[residual_add.vhd<br>Residual Add 1]:::purple
         LN2[layernorm.vhd<br>LayerNorm 2]:::purple
-        FFN[ffn.vhd<br>Feed-Forward Network]:::purple
-        GELU[psum_activation.vhd<br>GELU LUT]:::purple
+        
+        subgraph FFN_Block [Feed-Forward Network]
+            FFN[ffn.vhd]:::purple
+            GEMM_MM[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
+            GELU[psum_activation.vhd<br>GELU LUT]:::purple
+        end
+        
         Res2[residual_add.vhd<br>Residual Add 2]:::purple
-    end
-
-    subgraph Compute [Physical DSP GEMM Engines]
-        GEMM_OS[gemm_os.vhd<br>Int8 OS Systolic Array]:::orange
-        GEMM_MM[gemm_mm.vhd<br>Sequential MAC GEMM]:::orange
     end
 
     subgraph Backend [Output Classification]
@@ -181,40 +200,38 @@ graph TD
         Argmax[Argmax Comparator<br>Selects Class 0-9]:::green
     end
 
-    Display[4-Digit 7-Segment Display]:::green
-    Ack[prediction / done_ack]:::green
-
     %% Connections
     Host -->|pixel_in| Top
-    Top -->|RAW pixel bytes| FrontMem
+    Top -->|RAW bytes| FrontMem
     FrontMem --> Embed
+    
     WeightsROM -->|Projection weights| Embed
-    WeightsROM -.->|ROM values| Encoder
-    WeightsROM -.->|ROM values| Classifier
+    WeightsROM -.->|Layer weights| Encoder
+    WeightsROM -.->|Classifier weights| Classifier
 
     Embed -->|Tokens x + PosEmbed| LN1
     
-    %% Encoder internal pipeline
+    %% Encoder Pipeline
     LN1 --> MHA
+    MHA <--> GEMM_OS
+    MHA -.-> Softmax
+    
     MHA -->|Attn Context| Res1
     Embed -->|Skip x| Res1
+    
     Res1 --> LN2
     LN2 --> FFN
+    FFN <--> GEMM_MM
+    FFN -.-> GELU
+    
     FFN -->|FFN features| Res2
     Res1 -->|Skip intermediate| Res2
     
-    %% Compute core relations
-    MHA <-->|Parallel matrix multiplies| GEMM_OS
-    FFN <-->|Sequential projections| GEMM_MM
-    
-    %% Nested sub-blocks
-    MHA -.-> Softmax
-    FFN -.-> GELU
-
-    %% Backend pipeline
+    %% Backend Pipeline
     Res2 -->|16 Tokens| Classifier
     Classifier --> FC
     FC --> Argmax
+    
     Argmax -->|prediction| Display
     Argmax -->|prediction / done_ack| Ack
     Ack --> Host
