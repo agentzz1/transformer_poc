@@ -176,35 +176,38 @@ graph TD
     end
 
     subgraph Encoder [encoder_block.vhd - Transformer Encoder]
-        %% Control
+        %% Control Coordinator (positioned at the top)
         CU[control_unit.vhd<br>Central FSM Coordinator]:::blue
 
-        %% Local SRAM Buffers for data decoupling and replay
-        subgraph SRAM_Buffers [Internal SRAM Buffers]
-            input_buf[input_buffer<br>Stores Skip 1 Connection]:::blue
-            mha_buf[mha_buffer<br>Stores Attention Outputs]:::blue
-            res1_buf[res1_buffer<br>Stores Skip 2 & FFN Input]:::blue
-            ffn_buf[ffn_buffer<br>Stores FFN Outputs]:::blue
-        end
-
-        %% Sublayers
+        %% First Phase: MHA and its buffers
+        input_buf[input_buffer SRAM<br>Stores Skip 1 Connection]:::blue
+        
         subgraph MHA_Block [Multi-Head Self-Attention]
             MHA[mha_controller.vhd]:::purple
             GEMM_MM1[gemm_mm.vhd<br>Sequential MAC GEMM<br>Q / K / V / O Projections]:::orange
             Softmax[softmax.vhd<br>exp-LUT Softmax]:::purple
         end
         
+        mha_buf[mha_buffer SRAM<br>Stores Attention Outputs]:::blue
+        
+        %% Second Phase: Residual Addition & LN 1
         subgraph ResAdd_1 [Post-LN Residual block 1]
             Res1[residual_add.vhd<br>Add Elements]:::purple
             LN1[layernorm.vhd<br>Multiplier-Free LayerNorm 1]:::purple
         end
         
+        res1_buf[res1_buffer SRAM<br>Stores Skip 2 & FFN Input]:::blue
+        
+        %% Third Phase: FFN and its buffers
         subgraph FFN_Block [Feed-Forward Network]
             FFN[ffn.vhd]:::purple
             GEMM_MM2[gemm_mm.vhd<br>Sequential MAC GEMM<br>FC1 / FC2 Projections]:::orange
             GELU[psum_activation.vhd<br>GELU LUT]:::purple
         end
+        
+        ffn_buf[ffn_buffer SRAM<br>Stores FFN Outputs]:::blue
 
+        %% Fourth Phase: Residual Addition & LN 2
         subgraph ResAdd_2 [Post-LN Residual block 2]
             Res2[residual_add.vhd<br>Add Elements]:::purple
             LN2[layernorm.vhd<br>Multiplier-Free LayerNorm 2]:::purple
@@ -223,7 +226,8 @@ graph TD
     FrontMem --> Embed
     
     WeightsROM -->|Projection weights| Embed
-    WeightsROM -.->|Layer weights| Encoder
+    WeightsROM -.->|ROM weights| MHA_Block
+    WeightsROM -.->|ROM weights| FFN_Block
     WeightsROM -.->|Classifier weights| Classifier
 
     %% Encoder Routing
@@ -261,15 +265,14 @@ graph TD
     Argmax -->|prediction / done_ack| Ack
     Ack --> Host
 
-    %% Control Lines (conceptual)
-    CU -.->|Orchestrates| MHA_Block
-    CU -.->|Orchestrates| SRAM_Buffers
-    CU -.->|Orchestrates| ResAdd_1
-    CU -.->|Orchestrates| FFN_Block
-    CU -.->|Orchestrates| ResAdd_2
+    %% Control Lines (conceptual and clean)
+    CU -.->|Triggers & Orchestrates| MHA
+    CU -.->|Triggers & Orchestrates| FFN
+    CU -.->|Controls Replay| Res1
+    CU -.->|Controls Replay| Res2
 ```
 
-* **Legend:** **Cyan** = Activation/Pixel Data | **Orange** = Weights/ROM Access | **Green** = Prediction/Output | **Purple** = Control/Status / Encoder logic.
+* **Legend:** **Cyan** = Activation/Pixel Data | **Orange** = Weights/ROM Access | **Green** = Prediction/Output | **Purple** = Control/Status / Encoder logic | **Blue** = Control Unit & Local SRAM Buffers.
 
 ---
 
