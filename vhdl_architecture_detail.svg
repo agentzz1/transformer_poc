@@ -283,62 +283,61 @@
   <!-- ========================================== -->
   
   <!-- Main Dataflow Pipeline (Cyan/Green arrows) -->
-  <path d="M 500,170 L 500,210" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
-  <path d="M 500,270" fill="none" />
-  <path d="M 500,315 L 500,380" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
-  <path d="M 500,450 L 500,550" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M 500,170 L 500,210" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" fill="none" />
+  <path d="M 500,315 L 500,380" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" fill="none" />
+  <path d="M 500,450 L 500,550" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" fill="none" />
   
   <!-- Embedding to input_buffer skip -->
-  <path d="M 380,415 H 200 V 560" stroke="#2563eb" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow-blue)" />
+  <path d="M 380,415 H 200 V 560" stroke="#2563eb" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow-blue)" fill="none" />
   
   <!-- Inside MHA -->
-  <path d="M 500,625 L 500,640" stroke="#a855f7" stroke-width="1.5" />
-  <path d="M 437,685 V 702 H 500 V 720" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrow)" />
-  <path d="M 562,685 V 702 H 500" stroke="#a855f7" stroke-width="1.5" />
+  <path d="M 500,625 L 500,640" stroke="#a855f7" stroke-width="1.5" fill="none" />
+  <path d="M 437,685 V 702 H 500 V 720" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrow)" fill="none" />
+  <path d="M 562,685 V 702 H 500" stroke="#a855f7" stroke-width="1.5" fill="none" />
 
   <!-- MHA to mha_buffer -->
-  <path d="M 500,700 L 500,720" stroke="#06b6d4" stroke-width="2" />
+  <path d="M 500,700 L 500,720" stroke="#06b6d4" stroke-width="2" fill="none" />
   
   <!-- Buffers into ResAdd_1 -->
-  <path d="M 500,770 L 500,795" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
-  <path d="M 200,620 V 815 H 350" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" />
+  <path d="M 500,770 L 500,795" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" fill="none" />
+  <path d="M 200,620 V 815 H 350" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" fill="none" />
   
   <!-- ResAdd_1 to res1_buffer -->
-  <path d="M 500,915 V 930 H 200 V 945" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" />
+  <path d="M 500,915 V 930 H 200 V 945" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" fill="none" />
   <!-- ResAdd_1 to FFN -->
-  <path d="M 500,915 L 500,945" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M 500,915 L 500,945" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" fill="none" />
 
   <!-- Inside FFN -->
-  <path d="M 500,1020 L 500,1035" stroke="#a855f7" stroke-width="1.5" />
-  <path d="M 437,1080 V 1098 H 500 V 1115" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrow)" />
-  <path d="M 562,1080 V 1098 H 500" stroke="#a855f7" stroke-width="1.5" />
+  <path d="M 500,1020 L 500,1035" stroke="#a855f7" stroke-width="1.5" fill="none" />
+  <path d="M 437,1080 V 1098 H 500 V 1115" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrow)" fill="none" />
+  <path d="M 562,1080 V 1098 H 500" stroke="#a855f7" stroke-width="1.5" fill="none" />
 
   <!-- FFN to ffn_buffer -->
-  <path d="M 500,1080 L 500,1115" stroke="#06b6d4" stroke-width="2" />
+  <path d="M 500,1080 L 500,1115" stroke="#06b6d4" stroke-width="2" fill="none" />
 
   <!-- Buffers into ResAdd_2 -->
-  <path d="M 500,1165 L 500,1185" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
-  <path d="M 200,1005 V 1205 H 350" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" />
+  <path d="M 500,1165 L 500,1185" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" fill="none" />
+  <path d="M 200,1005 V 1205 H 350" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)" fill="none" />
 
   <!-- ResAdd_2 out to classifier -->
-  <path d="M 500,1320 L 500,1370" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M 500,1320 L 500,1370" stroke="#06b6d4" stroke-width="2.5" marker-end="url(#arrow)" fill="none" />
 
   <!-- Backend to Outputs -->
-  <path d="M 500,1570 V 1590 H 330 V 1610" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)" />
-  <path d="M 500,1570 V 1590 H 670 V 1610" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)" />
-  <path d="M 670,1660 V 1675 H 920 V 140 H 600" stroke="#64748b" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)" />
+  <path d="M 500,1570 V 1590 H 330 V 1610" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)" fill="none" />
+  <path d="M 500,1570 V 1590 H 670 V 1610" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)" fill="none" />
+  <path d="M 670,1660 V 1675 H 920 V 140 H 600" stroke="#64748b" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)" fill="none" />
 
   <!-- ROM Weight Distribution (Dashed Orange) -->
-  <path d="M 800,315 V 360 H 635" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
-  <path d="M 800,315 V 600 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
-  <path d="M 800,315 V 995 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
-  <path d="M 800,315 V 1480 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" />
+  <path d="M 800,315 V 360 H 635" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" fill="none" />
+  <path d="M 800,315 V 600 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" fill="none" />
+  <path d="M 800,315 V 995 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" fill="none" />
+  <path d="M 800,315 V 1480 H 650" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)" fill="none" />
 
   <!-- Control Coordinator Dashed Lines (Blue) -->
-  <path d="M 680,575 H 605" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
-  <path d="M 680,575 V 847 H 585" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
-  <path d="M 680,575 V 995 H 605" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
-  <path d="M 680,575 V 1238 H 580" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" />
+  <path d="M 680,575 H 605" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" fill="none" />
+  <path d="M 680,575 V 847 H 585" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" fill="none" />
+  <path d="M 680,575 V 995 H 605" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" fill="none" />
+  <path d="M 680,575 V 1238 H 580" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-blue)" fill="none" />
 
   <!-- ========================================== -->
   <!-- LEGEND (Y: 1700-1760)                      -->
