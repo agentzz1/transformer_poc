@@ -94,7 +94,7 @@ def _leading_one(x):
 
 def layernorm_lod_int8(tokens):
     vb  = 5  # log2(32)
-    frac = 7
+    frac = 5  # 7 - LN_HEADROOM (where LN_HEADROOM = 2)
     out = []
     for row in tokens:
         s    = sum(row)
