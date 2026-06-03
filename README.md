@@ -166,14 +166,14 @@ graph TD
     Display[4-Digit 7-Segment Display]:::green
     Ack[prediction / done_ack]:::green
 
-    subgraph TopLevel [FPGA Wrapper: basys3_top.vhd]
-        Top[Clock Div & UART Control]:::orange
+    subgraph TopLevel [FPGA Wrapper - basys3_top.vhd]
+        Top[Clock Div and UART Control]:::orange
         FrontMem[frontend_mem.vhd<br>UART RX Buffer]:::cyan
         WeightsROM[weights_pkg.vhd<br>Pre-compiled ROM]:::orange
     end
 
-    subgraph Frontend [Pixel & Patch Processing]
-        Embed[patch_embed.vhd<br>Patch Projection 16x7x7 -> 16x32]:::cyan
+    subgraph Frontend [Pixel and Patch Processing]
+        Embed[patch_embed.vhd<br>Patch Projection 16x7x7 to 16x32]:::cyan
     end
 
     subgraph Encoder [encoder_block.vhd - Transformer Encoder]
@@ -197,7 +197,7 @@ graph TD
             LN1[layernorm.vhd<br>Multiplier-Free LayerNorm 1]:::purple
         end
         
-        res1_buf[res1_buffer SRAM<br>Stores Skip 2 & FFN Input]:::blue
+        res1_buf[res1_buffer SRAM<br>Stores Skip 2 and FFN Input]:::blue
         
         %% Third Phase: FFN and its buffers
         subgraph FFN_Block [Feed-Forward Network]
@@ -217,7 +217,7 @@ graph TD
 
     subgraph Backend [Output Classification]
         Classifier[classifier.vhd<br>Global Average Pooling]:::green
-        FC[Classifier FC Proj<br>Logits 32 -> 10]:::green
+        FC[Classifier FC Proj<br>Logits 32 to 10]:::green
         Argmax[Argmax Comparator<br>Selects Class 0-9]:::green
     end
 
@@ -227,8 +227,8 @@ graph TD
     FrontMem --> Embed
     
     WeightsROM -->|Projection weights| Embed
-    WeightsROM -.->|ROM weights| MHA_Block
-    WeightsROM -.->|ROM weights| FFN_Block
+    WeightsROM -.->|ROM weights| MHA
+    WeightsROM -.->|ROM weights| FFN
     WeightsROM -.->|Classifier weights| Classifier
 
     %% Encoder Routing
@@ -267,8 +267,8 @@ graph TD
     Ack --> Host
 
     %% Control Lines (conceptual and clean)
-    CU -.->|Triggers & Orchestrates| MHA
-    CU -.->|Triggers & Orchestrates| FFN
+    CU -.->|Triggers and Orchestrates| MHA
+    CU -.->|Triggers and Orchestrates| FFN
     CU -.->|Controls Replay| Res1
     CU -.->|Controls Replay| Res2
 ```
