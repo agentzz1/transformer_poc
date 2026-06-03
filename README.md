@@ -143,135 +143,16 @@ This streams the images over COM4 and verifies the final, physical **77.21% accu
 ## Architecture Diagrams
 
 Two views of the same architecture:
-1. **Mermaid flowchart** — interactive diagram of signals, ports, and submodules, rendered inline by GitHub.
-2. **SVG schematic** — a detailed vector schematic with clock domains, ROM access, control paths, and SRAM replay buffers.
+1. **Flowchart** — signals, ports, and submodules at a glance.
+2. **Detailed schematic** — clock domains, ROM access, control paths, and SRAM replay buffers.
 
 ---
 
-### 1. Technical VHDL Flowchart (Mermaid)
+### 1. Technical Flowchart
 
-This vector flowchart is rendered dynamically by GitHub's markdown parser. It contains zero spelling artifacts, exact signal connections, color-coded legends, and is fully searchable:
+A flowchart of the exact signals, ports, and submodules, with a color-coded legend:
 
-```mermaid
-graph TD
-    %% Define Styles & Classes
-    classDef cyan fill:#e0f7fa,stroke:#00acc1,stroke-width:2px,color:#006064;
-    classDef orange fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100;
-    classDef purple fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c;
-    classDef green fill:#e8f8f5,stroke:#16a085,stroke-width:2px,color:#117864;
-    classDef blue fill:#e8f4f8,stroke:#2980b9,stroke-width:2px,color:#1b4f72;
-
-    %% Global Nodes
-    Host[Host PC / UART Interface<br>115,200 baud]:::cyan
-    Display[4-Digit 7-Segment Display]:::green
-    Ack[prediction / done_ack]:::green
-
-    subgraph TopLevel [FPGA Wrapper - basys3_top.vhd]
-        Top[Clock Div and UART Control]:::orange
-        FrontMem[frontend_mem.vhd<br>UART RX Buffer]:::cyan
-        WeightsROM[weights_pkg.vhd<br>Pre-compiled ROM]:::orange
-    end
-
-    subgraph Frontend [Pixel and Patch Processing]
-        Embed[patch_embed.vhd<br>Patch Projection 16x7x7 to 16x32]:::cyan
-    end
-
-    subgraph Encoder [encoder_block.vhd - Transformer Encoder]
-        %% Control Coordinator (positioned at the top)
-        CU[control_unit.vhd<br>Central FSM Coordinator]:::blue
-
-        %% First Phase: MHA and its buffers
-        input_buf[input_buffer SRAM<br>Stores Skip 1 Connection]:::blue
-        
-        subgraph MHA_Block [Multi-Head Self-Attention]
-            MHA[mha_controller.vhd]:::purple
-            GEMM_MM1[gemm_mm.vhd<br>Sequential MAC GEMM<br>Q / K / V / O Projections]:::orange
-            Softmax[softmax.vhd<br>exp-LUT Softmax]:::purple
-        end
-        
-        mha_buf[mha_buffer SRAM<br>Stores Attention Outputs]:::blue
-        
-        %% Second Phase: Residual Addition & LN 1
-        subgraph ResAdd_1 [Post-LN Residual block 1]
-            Res1[residual_add.vhd<br>Add Elements]:::purple
-            LN1[layernorm.vhd<br>Multiplier-Free LayerNorm 1]:::purple
-        end
-        
-        res1_buf[res1_buffer SRAM<br>Stores Skip 2 and FFN Input]:::blue
-        
-        %% Third Phase: FFN and its buffers
-        subgraph FFN_Block [Feed-Forward Network]
-            FFN[ffn.vhd]:::purple
-            GEMM_MM2[gemm_mm.vhd<br>Sequential MAC GEMM<br>FC1 / FC2 Projections]:::orange
-            GELU[psum_activation.vhd<br>GELU LUT]:::purple
-        end
-        
-        ffn_buf[ffn_buffer SRAM<br>Stores FFN Outputs]:::blue
-
-        %% Fourth Phase: Residual Addition & LN 2
-        subgraph ResAdd_2 [Post-LN Residual block 2]
-            Res2[residual_add.vhd<br>Add Elements]:::purple
-            LN2[layernorm.vhd<br>Multiplier-Free LayerNorm 2]:::purple
-        end
-    end
-
-    subgraph Backend [Output Classification]
-        Classifier[classifier.vhd<br>Global Average Pooling]:::green
-        FC[Classifier FC Proj<br>Logits 32 to 10]:::green
-        Argmax[Argmax Comparator<br>Selects Class 0-9]:::green
-    end
-
-    %% Flow connections
-    Host -->|pixel_in| Top
-    Top -->|RAW bytes| FrontMem
-    FrontMem --> Embed
-    
-    WeightsROM -->|Projection weights| Embed
-    WeightsROM -.->|ROM weights| MHA
-    WeightsROM -.->|ROM weights| FFN
-    WeightsROM -.->|Classifier weights| Classifier
-
-    %% Encoder Routing
-    Embed -->|Tokens x| MHA
-    Embed -->|Tokens x| input_buf
-    
-    %% MHA Internal
-    MHA <--> GEMM_MM1
-    MHA -.-> Softmax
-    MHA -->|Attn Context| mha_buf
-    
-    %% ResAdd 1
-    mha_buf -->|Replay Main| Res1
-    input_buf -->|Replay Skip| Res1
-    Res1 --> LN1
-    LN1 -->|LN output| res1_buf
-    
-    %% FFN Internal
-    res1_buf -->|Replay Main| FFN
-    FFN <--> GEMM_MM2
-    FFN -.-> GELU
-    FFN -->|FFN features| ffn_buf
-    
-    %% ResAdd 2
-    ffn_buf -->|Replay Main| Res2
-    res1_buf -->|Replay Skip| Res2
-    Res2 --> LN2
-    
-    %% Backend Routing
-    LN2 -->|16 Tokens| Classifier
-    Classifier --> FC
-    FC --> Argmax
-    
-    Argmax -->|prediction| Display
-    Argmax -->|prediction / done_ack| Ack
-    Ack --> Host
-
-    %% Control Lines (conceptual and clean)
-    CU -.->|Triggers and Orchestrates| MHA
-    CU -.->|Triggers and Orchestrates| FFN
-    CU -.->|Controls Replay| Res1
-    CU -.->|Controls Replay| Res2
-```
+![ViT FPGA architecture flowchart](architecture_flowchart.png)
 
 * **Legend:** **Cyan** = Activation/Pixel Data | **Orange** = Weights/ROM Access | **Green** = Prediction/Output | **Purple** = Control/Status / Encoder logic | **Blue** = Control Unit & Local SRAM Buffers.
 
