@@ -39,3 +39,6 @@ extracted_sessions/
 # ── OS ───────────────────────────────────────────────────────────────────
 Thumbs.db
 .DS_Store
+
+# ── Unreferenced AI-generated diagram (kept locally, not in the public repo) ─
+vit_fpga_architecture.png
