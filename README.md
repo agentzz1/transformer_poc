@@ -1,13 +1,14 @@
-# 🚀 Working FPGA MNIST Vision Transformer (ViT)
-### *Bit-Exact to Golden Model • 77.21% Physical Accuracy • Custom QAT Pipeline on Basys 3*
+# FPGA MNIST Vision Transformer (ViT) — Basys 3 / Artix-7
+
+**Bit-exact HW/SW co-design · 100% golden-model match across all 10,000 test images · custom QAT pipeline**
 
 This repository contains a fully synthesizable, register-exact **Vision Transformer (ViT) Accelerator** written in **VHDL-2008**, deployed and physically verified on the **Digilent Basys 3 FPGA (Xilinx Artix-7)**. 
 
-By coupling a custom **Quantization-Aware Training (QAT)** pipeline in PyTorch with a register-faithful **Integer Golden Model** and hardware description code, we completely unified training and physical hardware inference. The physical board achieves **100.0% bit-exact prediction matching** over all 10,000 MNIST test images!
+By coupling a custom **Quantization-Aware Training (QAT)** pipeline in PyTorch with a register-faithful **Integer Golden Model** and hardware description code, the result is a unified training-to-silicon flow: the physical board produces **bit-exact predictions on all 10,000 MNIST test images** (100% match vs. the integer reference).
 
 ---
 
-## 🏆 Performance & Accuracy Summary
+## Performance & Accuracy
 
 The entire MNIST test set of 10,000 images was evaluated on the physical Basys 3 hardware via UART at 115,200 baud, comparing physical FPGA outputs directly against our Python models.
 
@@ -18,7 +19,7 @@ The entire MNIST test set of 10,000 images was evaluated on the physical Basys 3
 | **Physical FPGA Hardware (Basys 3)** | 10,000 images | **77.21%** | **100.0% (10,000 / 10,000)** |
 
 > [!NOTE]
-> This is a massive leap over the initial baseline design (which scored **68%** accuracy and suffered from severe quantization clipping and LayerNorm gradient mismatch!). 
+> The initial baseline scored **68%** before fixing quantization clipping and a LayerNorm mismatch in the QAT pipeline; the current design reaches **77.21%** with full bit-exactness to the integer reference. 
 
 ### FPGA Resource Utilization (xc7a35tcpg236-1)
 
@@ -31,7 +32,7 @@ The entire MNIST test set of 10,000 images was evaluated on the physical Basys 3
 
 ---
 
-## 🏗️ Hardware Architecture & VHDL Sources
+## Hardware Architecture & VHDL Sources
 
 The hardware is designed for streaming, pipelined register-transfer level (RTL) execution at **50 MHz**, utilizing internal block RAMs (BRAMs) and DSP slices.
 
@@ -60,46 +61,46 @@ Input (784 Pixels)
 Output Prediction (7-Segment Display / UART)
 ```
 
-### 📁 Detailed VHDL Source File Directory
+### VHDL Source Files
 
 | File Basename | Hardware Layer | Mathematical & Register Function |
 |:---|:---|:---|
-| **[basys3_top.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/basys3_top.vhd)** | Top-Level Wrapper | Manages physical board clocks (100MHz PLL to 50MHz), active-low resets, UART RX/TX serial interface (115,200 baud), LED progress indicators, and instantiates the main accelerator core. |
-| **[encoder_block.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/encoder_block.vhd)** | Transformer Block | Structural top-level connecting Multi-Head Attention, Feed-Forward Network, Residual Additions, and Layer Normalization modules. |
-| **[weights_pkg.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/weights_pkg.vhd)** | Pre-compiled ROM | **Crucial weight package.** Houses all QAT-trained weights, biases, and positional embeddings represented strictly as pre-compiled signed 8-bit Q1.7 integers. |
-| **[patch_embed.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/patch_embed.vhd)** | Patch Embedder | Receives 784 raw pixels, partitions them into 16 non-overlapping $7 \times 7$ patches, performs patch projection to $D_{model}=32$ tokens, and adds positional embeddings. |
-| **[layernorm.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/layernorm.vhd)** | LayerNorm | **Multiplier-free and division-free.** Computes mean and variance, uses Leading-One Detection (LOD) to approximate the reciprocal-square-root, and performs bit-shifts matching `LN_HEADROOM = 2` (4x scale divisor) to keep tokens in Q1.7 boundaries. |
-| **[softmax.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/softmax.vhd)** | Softmax | Performs numerically-stable integer Softmax. Uses a 256-byte ROM Lookup Table (`_EXP_LUT_Q16`) to compute exp over subtraction differences. |
-| **[psum_activation.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/psum_activation.vhd)** | GELU LUT | Simulates standard GELU activation in a single clock cycle using a pre-calculated 256-byte ROM Lookup Table (`GELU_LUT_I8`). |
-| **[mha_controller.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/mha_controller.vhd)** | Self-Attention | Sequences key, query, and value matrix multiplications, computes attention score dot-products, applies Softmax, and outputs the final projected sequence. |
-| **[ffn.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/ffn.vhd)** | Feed-Forward | Implements the FFN: $FC1$ ($32 \rightarrow 64$), GELU activation, and $FC2$ ($64 \rightarrow 32$). |
-| **[gemm_mm.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_mm.vhd)** | active GEMM Engine | **The actual compute core.** Implements a sequential, memory-mapped Multiply-Accumulate (MAC) matrix multiplier. It sequentially sequences calculations over $M \times N \times K$ cycles using highly optimized internal DSP blocks, keeping LUT utilization extremely low. |
-| **[classifier.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/classifier.vhd)** | Output Classifier | Conducts Global Average Pooling (GAP) over 16 tokens, executes the final GEMM with the classifier's weights/biases, and runs a strict-greater `argmax` to output the final class (0-9). |
-| **[seg_test.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/seg_test.vhd)** | 7-Segment Multiplexer | Dynamically controls the 4-digit display on the Basys 3 board to display the currently predicted digit. |
-| **[control_unit.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/control_unit.vhd)** | Controller FSM | Central Finite State Machine that orchestrates the execution states, address generation, RAM writes, and pipelines. |
-| *[gemm_os.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_os.vhd)* | Concept Only (Unused) | Leftover reference implementation of an Output-Stationary Systolic Array. Not instantiated in the active hardware design. |
-| *[gemm_os_adapter.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/gemm_os_adapter.vhd)* | Concept Only (Unused) | Leftover reference adapter for the systolic array. Not instantiated in the active hardware design. |
+| **[basys3_top.vhd](basys3_top.vhd)** | Top-Level Wrapper | Manages physical board clocks (100MHz PLL to 50MHz), active-low resets, UART RX/TX serial interface (115,200 baud), LED progress indicators, and instantiates the main accelerator core. |
+| **[encoder_block.vhd](encoder_block.vhd)** | Transformer Block | Structural top-level connecting Multi-Head Attention, Feed-Forward Network, Residual Additions, and Layer Normalization modules. |
+| **[weights_pkg.vhd](weights_pkg.vhd)** | Pre-compiled ROM | **Crucial weight package.** Houses all QAT-trained weights, biases, and positional embeddings represented strictly as pre-compiled signed 8-bit Q1.7 integers. |
+| **[patch_embed.vhd](patch_embed.vhd)** | Patch Embedder | Receives 784 raw pixels, partitions them into 16 non-overlapping $7 \times 7$ patches, performs patch projection to $D_{model}=32$ tokens, and adds positional embeddings. |
+| **[layernorm.vhd](layernorm.vhd)** | LayerNorm | **Multiplier-free and division-free.** Computes mean and variance, uses Leading-One Detection (LOD) to approximate the reciprocal-square-root, and performs bit-shifts matching `LN_HEADROOM = 2` (4x scale divisor) to keep tokens in Q1.7 boundaries. |
+| **[softmax.vhd](softmax.vhd)** | Softmax | Performs numerically-stable integer Softmax. Uses a 256-byte ROM Lookup Table (`_EXP_LUT_Q16`) to compute exp over subtraction differences. |
+| **[psum_activation.vhd](psum_activation.vhd)** | GELU LUT | Simulates standard GELU activation in a single clock cycle using a pre-calculated 256-byte ROM Lookup Table (`GELU_LUT_I8`). |
+| **[mha_controller.vhd](mha_controller.vhd)** | Self-Attention | Sequences key, query, and value matrix multiplications, computes attention score dot-products, applies Softmax, and outputs the final projected sequence. |
+| **[ffn.vhd](ffn.vhd)** | Feed-Forward | Implements the FFN: $FC1$ ($32 \rightarrow 64$), GELU activation, and $FC2$ ($64 \rightarrow 32$). |
+| **[gemm_mm.vhd](gemm_mm.vhd)** | active GEMM Engine | **The actual compute core.** Implements a sequential, memory-mapped Multiply-Accumulate (MAC) matrix multiplier. It sequentially sequences calculations over $M \times N \times K$ cycles using highly optimized internal DSP blocks, keeping LUT utilization extremely low. |
+| **[classifier.vhd](classifier.vhd)** | Output Classifier | Conducts Global Average Pooling (GAP) over 16 tokens, executes the final GEMM with the classifier's weights/biases, and runs a strict-greater `argmax` to output the final class (0-9). |
+| **[seg_test.vhd](seg_test.vhd)** | 7-Segment Multiplexer | Dynamically controls the 4-digit display on the Basys 3 board to display the currently predicted digit. |
+| **[control_unit.vhd](control_unit.vhd)** | Controller FSM | Central Finite State Machine that orchestrates the execution states, address generation, RAM writes, and pipelines. |
+| *[gemm_os.vhd](gemm_os.vhd)* | Concept Only (Unused) | Leftover reference implementation of an Output-Stationary Systolic Array. Not instantiated in the active hardware design. |
+| *[gemm_os_adapter.vhd](gemm_os_adapter.vhd)* | Concept Only (Unused) | Leftover reference adapter for the systolic array. Not instantiated in the active hardware design. |
 
 ---
 
-## 🐍 Python Software & Training Stack
+## Python Software & Training Stack
 
 We bridge the gap between continuous floating-point training and discrete integer hardware registers using a three-tier software stack:
 
-1. **[mnist_poc.py](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/mnist_poc.py) (PyTorch QAT environment):**
+1. **[mnist_poc.py](mnist_poc.py) (PyTorch QAT environment):**
    - Incorporates custom PyTorch layers (`HWLayerNorm`, `FQLinear`, `HWSoftmax`, `HWGELU`) using Straight-Through Estimators (STE).
    - Simulates physical integer divisions (`rounding_mode='floor'`) and clamping/saturation (`[-128, 127]`).
    - Implements a **Logit Scaling factor of 8.0** to keep QAT weights small and bounded while allowing PyTorch's loss function to see unconstrained boundaries for gradient flow.
-2. **[golden_model.py](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/golden_model.py) (Software Register Simulator):**
+2. **[golden_model.py](golden_model.py) (Software Register Simulator):**
    - Pure Python representation of the hardware. 100% free of PyTorch and floating-point math.
    - Simulates physical memory offsets, exact bitwise shifts (`>> 7`), and Lookup Table indices.
-3. **[fpga_vs_python.py](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/fpga_vs_python.py) (Physical UART Test Suite):**
+3. **[fpga_vs_python.py](fpga_vs_python.py) (Physical UART Test Suite):**
    - Handles USB-to-UART handshakes at 115,200 baud, sending raw pixels and receiving predictions.
    - Evaluates the accuracy and verifies the bit-exactness of the FPGA board in real time.
 
 ---
 
-## 🛠️ Step-by-Step Execution Guide
+## Build & Run
 
 ### 1. Fine-Tune and Train QAT Model
 To train the hardware-identical QAT model on your local PC and export the weights:
@@ -113,7 +114,7 @@ Generate the pre-compiled VHDL ROM package `weights_pkg.vhd`:
 ```bash
 python mnist_poc.py export
 ```
-This updates the Xilinx ROM tables directly inside [weights_pkg.vhd](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/weights_pkg.vhd).
+This updates the Xilinx ROM tables directly inside [weights_pkg.vhd](weights_pkg.vhd).
 
 ### 3. Synthesize and Implement via Vivado
 Open Xilinx Vivado (2025.2 or similar) and run the batch TCL compilation script to generate the physical bitstream:
@@ -139,11 +140,11 @@ This streams the images over COM4 and verifies the final, physical **77.21% accu
 
 ---
 
-## 🎨 Hardware Architecture & Diagrams
+## Architecture Diagrams
 
-To satisfy both high-level presentations and strict technical reviews, we provide two representations of our VHDL architecture:
-1. **The Technical Flowchart (Mermaid):** An "engineering-clean", interactive vector diagram showing exact signals, ports, and submodules.
-2. **The Hero Graphic (AI-Generated rendering):** A sleek, stylized visual overview of the accelerator.
+Two views of the same architecture:
+1. **Mermaid flowchart** — interactive diagram of signals, ports, and submodules, rendered inline by GitHub.
+2. **SVG schematic** — a detailed vector schematic with clock domains, ROM access, control paths, and SRAM replay buffers.
 
 ---
 
@@ -276,17 +277,9 @@ graph TD
 
 ---
 
-### 2. High-Fidelity Vector Schematic (SVG)
+### 2. Vector Schematic (SVG)
 
-For research reports and publications, this high-fidelity SVG diagram represents the precise dataflow, clock domains, weights ROM access, control pathways, and internal SRAM replay buffers. It is fully responsive, razor-sharp at any zoom level, and styled in a premium engineering dark-mode:
+A detailed SVG schematic of the dataflow, clock domains, weights-ROM access, control paths, and internal SRAM replay buffers — vector, so it stays sharp at any zoom:
 
 ![VHDL Architecture Detail Vector Schematic](vhdl_architecture_detail.svg)
-
----
-
-### 3. Stylized Visual Block Diagram (Hero Graphic)
-
-For slides, portfolios, or LinkedIn, below is the vector-styled visual rendering of the accelerator architecture. The physical image is pushed to the root directory as [vit_fpga_architecture.png](file:///c:/Users/maogo/OneDrive/transformer/transformer_poc/vit_fpga_architecture.png):
-
-![ViT FPGA Block Diagram Architecture](vit_fpga_architecture.png)
 

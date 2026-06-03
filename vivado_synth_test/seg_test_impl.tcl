@@ -1,7 +1,7 @@
 # Build the minimal seg_test sanity design -> seg_test.bit
 set SCRIPT_DIR [file dirname [info script]]
 set POC_DIR    [file normalize "$SCRIPT_DIR/.."]
-set WORK_DIR   "C:/Users/maogo/vivado_work"
+set WORK_DIR   [file join $::env(USERPROFILE) vivado_work]
 set PART       "xc7a35tcpg236-1"
 
 catch { close_project }

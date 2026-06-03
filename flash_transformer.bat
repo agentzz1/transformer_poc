@@ -4,9 +4,9 @@ REM flash_transformer.bat - Flash the final ViT Transformer bitstream onto Basys
 REM ============================================================================
 
 set VIVADO_BAT="C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat"
-set TCL_SCRIPT="C:\Users\maogo\OneDrive\transformer\transformer_poc\vivado_synth_test\flash_basys3.tcl"
-set LOG_FILE="C:\Users\maogo\vivado_work\flash.log"
-set JOU_FILE="C:\Users\maogo\vivado_work\flash.jou"
+set TCL_SCRIPT="%~dp0vivado_synth_test\flash_basys3.tcl"
+set LOG_FILE="%USERPROFILE%\vivado_work\flash.log"
+set JOU_FILE="%USERPROFILE%\vivado_work\flash.jou"
 
 echo ============================================================================
 echo [INFO] Ready to flash the Transformer bitstream to Basys 3

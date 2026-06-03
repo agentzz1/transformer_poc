@@ -14,7 +14,7 @@ set SCRIPT_DIR [file dirname [info script]]
 set POC_DIR    [file normalize "$SCRIPT_DIR/.."]
 # Place the Vivado project on a local (non-OneDrive) path to avoid file-lock
 # issues from OneDrive sync.  Change WORK_DIR if needed.
-set WORK_DIR   "C:/Users/maogo/vivado_work"
+set WORK_DIR   [file join $::env(USERPROFILE) vivado_work]
 set PROJ_NAME  "basys3_impl"
 set PROJ_DIR   $WORK_DIR
 set PART       "xc7a35tcpg236-1"

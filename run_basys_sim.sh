@@ -2,7 +2,7 @@
 # Build + run end-to-end tb_basys3_top simulation with GHDL.
 # Dumps pe/mha/y1/ffn/encoder _vhdl.txt for comparison against Python golden.
 set -e
-GHDL="/c/Users/maogo/AppData/Local/Microsoft/WinGet/Packages/ghdl.ghdl.ucrt64.mcode_Microsoft.Winget.Source_8wekyb3d8bbwe/bin/ghdl"
+GHDL="$HOME/AppData/Local/Microsoft/WinGet/Packages/ghdl.ghdl.ucrt64.mcode_Microsoft.Winget.Source_8wekyb3d8bbwe/bin/ghdl"
 STD="--std=08"
 W="--workdir=work_basys -P=work_basys"
 
