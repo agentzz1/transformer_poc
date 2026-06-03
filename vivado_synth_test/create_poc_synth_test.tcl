@@ -6,7 +6,7 @@
 #          DATA_WIDTH=8 and MNIST dimensions.
 #
 # Usage (Vivado Tcl Console or batch):
-#   source C:/Users/maogo/OneDrive/transformer/transformer_poc/vivado_synth_test/create_poc_synth_test.tcl
+#   source <repo>/vivado_synth_test/create_poc_synth_test.tcl
 # =============================================================================
 
 set PROJ_DIR  [file dirname [info script]]

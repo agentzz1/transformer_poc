@@ -5,7 +5,7 @@
 # exact board, plus a short poll so a freshly re-plugged USB target is found.
 # =============================================================================
 
-set BIT "C:/Users/maogo/vivado_work/basys3_top.bit"
+set BIT [file join $::env(USERPROFILE) vivado_work basys3_top.bit]
 if {![file exists $BIT]} {
     puts "ERROR: bitstream not found: $BIT"
     exit 1
