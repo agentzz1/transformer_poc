@@ -42,3 +42,8 @@ Thumbs.db
 
 # ── Unreferenced AI-generated diagram (kept locally, not in the public repo) ─
 vit_fpga_architecture.png
+
+# ── Kaggle S6E6 artefacts (large/derived; not source) ──
+kaggle_s6e6/submission*.csv
+kaggle_s6e6/*.npy
+*.zip
