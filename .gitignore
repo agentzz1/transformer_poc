@@ -49,3 +49,4 @@ kaggle_s6e6/*.npy
 *.zip
 kaggle_s6e6/sub_*.csv
 kaggle_s6e6/meta.json
+catboost_info/
