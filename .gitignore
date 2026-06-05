@@ -47,3 +47,5 @@ vit_fpga_architecture.png
 kaggle_s6e6/submission*.csv
 kaggle_s6e6/*.npy
 *.zip
+kaggle_s6e6/sub_*.csv
+kaggle_s6e6/meta.json
