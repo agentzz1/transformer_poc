@@ -87,6 +87,10 @@ print('done')
 """)
 
 nb = nbf.v4.new_notebook(); nb['cells']=cells
+nb['metadata'] = {
+  "kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"},
+  "language_info": {"name": "python", "version": "3.11"},
+}
 nbf.write(nb, 'kaggle_s6e6/push/ps-s6e6-ag-gpu.ipynb')
 
 meta = {
