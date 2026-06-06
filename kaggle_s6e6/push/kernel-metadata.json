@@ -1,0 +1,18 @@
+{
+  "id": "agentzz/ps-s6e6-ag-gpu",
+  "title": "ps-s6e6 ag gpu",
+  "code_file": "ps-s6e6-ag-gpu.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "nina2025/ps-s6e6"
+  ],
+  "competition_sources": [
+    "playground-series-s6e6"
+  ],
+  "kernel_sources": []
+}

@@ -50,3 +50,5 @@ kaggle_s6e6/*.npy
 kaggle_s6e6/sub_*.csv
 kaggle_s6e6/meta.json
 catboost_info/
+kaggle_s6e6/pulled/
+kaggle_s6e6/push/ag_*
