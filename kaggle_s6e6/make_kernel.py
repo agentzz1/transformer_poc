@@ -13,11 +13,15 @@ subprocess.run([sys.executable,"-m","pip","install","-q","autogluon.tabular[ligh
 """)
 
 code(r"""
-import glob, numpy as np, pandas as pd
-# locate competition data (mounted via competition_sources)
-COMP = glob.glob('/kaggle/input/playground-series-s6e6')[0]
+import glob, os, numpy as np, pandas as pd
+print('inputs:', os.listdir('/kaggle/input'))
+# locate competition data robustly (mount path can vary)
+tr_paths = glob.glob('/kaggle/input/**/train.csv', recursive=True)
+te_paths = glob.glob('/kaggle/input/**/test.csv', recursive=True)
+print('train.csv candidates:', tr_paths)
+COMP = os.path.dirname(tr_paths[0])
 tr = pd.read_csv(f'{COMP}/train.csv'); te = pd.read_csv(f'{COMP}/test.csv')
-print('train', tr.shape, 'test', te.shape)
+print('train', tr.shape, 'test', te.shape, '| COMP=', COMP)
 CLASSES=['GALAXY','QSO','STAR']; CAT=['spectral_type','galaxy_population']; MAGS=['u','g','r','i','z']
 def fe(df):
     df=df.copy()
@@ -36,7 +40,7 @@ train_data=trf[FEATS+['class']]; test_data=tef[FEATS]
 code(r"""
 from autogluon.tabular import TabularPredictor
 predictor = TabularPredictor(label='class', eval_metric='balanced_accuracy', path='ag_s6e6')
-predictor.fit(train_data, presets='best_quality', time_limit=14400,
+predictor.fit(train_data, presets='best_quality', time_limit=5400,
               num_bag_folds=5, num_stack_levels=1, ag_args_fit={'num_gpus':1})
 print(predictor.leaderboard(silent=True).head(15))
 """)
