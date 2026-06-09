@@ -1,0 +1,21 @@
+# Normalize line endings: store text with LF in the repo, check out native on Windows.
+* text=auto
+
+# Source files are always LF in the repo for consistent diffs across platforms.
+*.py    text eol=lf
+*.vhd   text eol=lf
+*.sh    text eol=lf
+*.tcl   text eol=lf
+*.xdc   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# Windows batch files must keep CRLF or they can misbehave.
+*.bat   text eol=crlf
+
+# Binary assets — never touch, never diff as text.
+*.png   binary
+*.svg   binary
+*.pth   binary
+*.bin   binary
+*.hex   binary
