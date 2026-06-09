@@ -6,6 +6,15 @@ This repository contains a synthesizable Vision Transformer (ViT) inference acce
 
 On the MNIST test set, the FPGA output matches the integer golden model on all 10,000 images, and both reach 77.21% accuracy.
 
+## Architecture
+
+Block diagram of the dataflow: solid arrows are the activation pipeline, dashed
+arrows are the control (`control_unit.vhd`) and weight (`weights_pkg.vhd`) paths.
+The source is [`architecture.dot`](architecture.dot) (Graphviz); regenerate with
+`dot -Tsvg architecture.dot -o architecture.svg`.
+
+![MNIST ViT FPGA accelerator block diagram](architecture.svg)
+
 ---
 
 ## Performance & Accuracy
@@ -139,14 +148,3 @@ Run the UART harness to evaluate the 10,000 test images on the board:
 python fpga_vs_python.py --port COM4 --count 10000
 ```
 This streams the images over COM4 and reports the 77.21% accuracy and the per-image agreement with the golden model.
-
----
-
-## Architecture Diagram
-
-Block diagram of the dataflow: solid arrows are the activation pipeline, dashed
-arrows are the control (`control_unit.vhd`) and weight (`weights_pkg.vhd`) paths.
-The source is [`architecture.dot`](architecture.dot) (Graphviz); regenerate with
-`dot -Tsvg architecture.dot -o architecture.svg`.
-
-![MNIST ViT FPGA accelerator block diagram](architecture.svg)
