@@ -142,26 +142,10 @@ This streams the images over COM4 and reports the 77.21% accuracy and the per-im
 
 ---
 
-## Architecture Diagrams
+## Architecture Diagram
 
-Two views of the same design:
-1. Flowchart — signals, ports, and submodules at a glance.
-2. Detailed schematic — clock domains, ROM access, control paths, and SRAM buffers.
+A schematic of the dataflow, clock domains, weights-ROM access, control paths, and internal SRAM buffers (vector, so it stays sharp at any zoom):
 
----
-
-### 1. Flowchart
-
-Signals, ports, and submodules, with a color-coded legend:
-
-![ViT FPGA architecture flowchart](architecture_flowchart.png)
+![MNIST ViT hardware processor architecture](vhdl_architecture_detail.svg)
 
 * Legend: Cyan = activation/pixel data | Orange = weights/ROM access | Green = prediction/output | Purple = control/status and encoder logic | Blue = control unit and local SRAM buffers.
-
----
-
-### 2. Vector Schematic (SVG)
-
-A vector schematic of the dataflow, clock domains, weights-ROM access, control paths, and internal SRAM buffers:
-
-![VHDL Architecture Detail Vector Schematic](vhdl_architecture_detail.svg)
