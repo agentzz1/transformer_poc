@@ -92,7 +92,7 @@ We bridge the gap between continuous floating-point training and discrete intege
    - Simulates physical integer divisions (`rounding_mode='floor'`) and clamping/saturation (`[-128, 127]`).
    - Implements a **Logit Scaling factor of 8.0** to keep QAT weights small and bounded while allowing PyTorch's loss function to see unconstrained boundaries for gradient flow.
 2. **[golden_model.py](golden_model.py) (Software Register Simulator):**
-   - Pure Python representation of the hardware. 100% free of PyTorch and floating-point math.
+   - Pure Python representation of the hardware. PyTorch-free; integer-only inference path (floats appear only in one-time GELU/softmax LUT construction and input-pixel normalization).
    - Simulates physical memory offsets, exact bitwise shifts (`>> 7`), and Lookup Table indices.
 3. **[fpga_vs_python.py](fpga_vs_python.py) (Physical UART Test Suite):**
    - Handles USB-to-UART handshakes at 115,200 baud, sending raw pixels and receiving predictions.

@@ -41,6 +41,12 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
+# Make stdout/stderr UTF-8 so the Unicode glyphs in our prints (→ ≤ ≈ ≠ ✓ ✗)
+# don't raise UnicodeEncodeError on a default Windows console (cp1252).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Dimensions  (keep in sync with VHDL generics)
 # ──────────────────────────────────────────────────────────────────────────────

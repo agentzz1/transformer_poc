@@ -19,10 +19,17 @@ Usage:
 import argparse
 import struct
 import math
+import sys
 import time
 import serial
 from pathlib import Path
 import numpy as np
+
+# Make stdout/stderr UTF-8 so the ✓/✗ glyphs printed per sample don't raise
+# UnicodeEncodeError on a default Windows console (cp1252).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
