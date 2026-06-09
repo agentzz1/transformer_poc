@@ -1,0 +1,88 @@
+// MNIST ViT FPGA accelerator — block diagram
+// Render:  dot -Tsvg architecture.dot -o architecture.svg
+//          dot -Tpng -Gdpi=200 architecture.dot -o architecture.png
+digraph vit_fpga {
+    rankdir=TB;
+    bgcolor="white";
+    splines=ortho;
+    nodesep=0.35;
+    ranksep=0.5;
+    fontname="Helvetica";
+    labelloc="t";
+    fontsize=16;
+    label="MNIST Vision Transformer — FPGA accelerator (Basys 3 / Artix-7)";
+
+    node [shape=box, style="filled", fillcolor="#f5f5f5", color="#333333",
+          fontname="Helvetica", fontsize=11, margin="0.12,0.07"];
+    edge [color="#444444", arrowsize=0.7, fontname="Helvetica", fontsize=9];
+
+    // ---- I/O ----
+    host   [label="Host PC\nUART @ 115,200 baud", fillcolor="#e8eef5"];
+    sevseg [label="7-segment display\n(predicted digit)", fillcolor="#eaeaea"];
+    ack    [label="UART result / ack\n(host verification)", fillcolor="#eaeaea"];
+
+    // ---- basys3_top wrapper ----
+    subgraph cluster_top {
+        label="basys3_top.vhd  (FPGA top wrapper)";
+        fontsize=11; fontname="Helvetica"; color="#999999"; style="dashed";
+        clk    [label="clock div + reset FSM\n100 MHz PLL -> 50 MHz"];
+        femem  [label="frontend_mem.vhd\n784-byte pixel buffer"];
+        wrom   [label="weights_pkg.vhd\nweight / bias ROM (Q1.7)", fillcolor="#f0ead8"];
+    }
+
+    patch [label="patch_embed.vhd\n16 patches (7x7) -> 16 x 32 tokens"];
+
+    // ---- encoder_block ----
+    subgraph cluster_enc {
+        label="encoder_block.vhd  (transformer encoder)";
+        fontsize=11; fontname="Helvetica"; color="#888888"; style="solid";
+
+        ctrl [label="control_unit.vhd\ncentral FSM", fillcolor="#e8eef5"];
+
+        subgraph cluster_mha {
+            label="multi-head self-attention";
+            fontsize=10; color="#aaaaaa"; style="dotted";
+            mha  [label="mha_controller.vhd"];
+            gemm1 [label="gemm_mm.vhd\nsequential MAC", fillcolor="#f0ead8"];
+            sm   [label="softmax.vhd\nexp-LUT ROM"];
+            mha -> gemm1 [color="#888888", arrowsize=0.6, minlen=1];
+            mha -> sm    [color="#888888", arrowsize=0.6, minlen=1];
+            {rank=same; gemm1; sm;}
+        }
+        res1 [label="residual_add.vhd + layernorm.vhd\nresidual 1 + LN 1"];
+
+        subgraph cluster_ffn {
+            label="feed-forward network";
+            fontsize=10; color="#aaaaaa"; style="dotted";
+            ffn  [label="ffn.vhd\nFC1 32->64, FC2 64->32"];
+            gemm2 [label="gemm_mm.vhd\nsequential MAC", fillcolor="#f0ead8"];
+            gelu [label="psum_activation.vhd\nGELU-LUT ROM"];
+            ffn -> gemm2 [color="#888888", arrowsize=0.6, minlen=1];
+            ffn -> gelu  [color="#888888", arrowsize=0.6, minlen=1];
+            {rank=same; gemm2; gelu;}
+        }
+        res2 [label="residual_add.vhd + layernorm.vhd\nresidual 2 + LN 2"];
+    }
+
+    cls [label="classifier.vhd\nglobal avg pool -> linear 32->10 -> argmax"];
+
+    // ---- main dataflow ----
+    host  -> femem;
+    femem -> patch;
+    patch -> mha;
+    mha   -> res1;
+    res1  -> ffn;
+    ffn   -> res2;
+    res2  -> cls;
+    cls   -> sevseg;
+    cls   -> ack;
+
+    // ---- control + weights (dashed, secondary) ----
+    ctrl  -> mha  [style=dashed, color="#6a8caf", constraint=false, label="control"];
+    ctrl  -> ffn  [style=dashed, color="#6a8caf", constraint=false];
+    wrom  -> mha   [style=dashed, color="#b08d57", constraint=false, label="weights"];
+    wrom  -> ffn   [style=dashed, color="#b08d57", constraint=false];
+    wrom  -> cls   [style=dashed, color="#b08d57", constraint=false];
+
+    clk -> femem [style=invis];
+}

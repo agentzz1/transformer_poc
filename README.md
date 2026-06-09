@@ -144,8 +144,9 @@ This streams the images over COM4 and reports the 77.21% accuracy and the per-im
 
 ## Architecture Diagram
 
-A schematic of the dataflow, clock domains, weights-ROM access, control paths, and internal SRAM buffers (vector, so it stays sharp at any zoom):
+Block diagram of the dataflow: solid arrows are the activation pipeline, dashed
+arrows are the control (`control_unit.vhd`) and weight (`weights_pkg.vhd`) paths.
+The source is [`architecture.dot`](architecture.dot) (Graphviz); regenerate with
+`dot -Tsvg architecture.dot -o architecture.svg`.
 
-![MNIST ViT hardware processor architecture](vhdl_architecture_detail.svg)
-
-* Legend: Cyan = activation/pixel data | Orange = weights/ROM access | Green = prediction/output | Purple = control/status and encoder logic | Blue = control unit and local SRAM buffers.
+![MNIST ViT FPGA accelerator block diagram](architecture.svg)
