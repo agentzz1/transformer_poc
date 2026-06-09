@@ -1,40 +1,42 @@
 # FPGA MNIST Vision Transformer (ViT) — Basys 3 / Artix-7
 
-**Bit-exact HW/SW co-design · 100% golden-model match across all 10,000 test images · custom QAT pipeline**
+A personal hobby project exploring an end-to-end training-to-silicon flow for a small Vision Transformer.
 
-This repository contains a fully synthesizable, register-exact **Vision Transformer (ViT) Accelerator** written in **VHDL-2008**, deployed and physically verified on the **Digilent Basys 3 FPGA (Xilinx Artix-7)**. 
+This repository contains a synthesizable Vision Transformer (ViT) inference accelerator written in VHDL-2008 and run on the Digilent Basys 3 FPGA (Xilinx Artix-7). A custom Quantization-Aware Training (QAT) pipeline in PyTorch is paired with an integer "golden model" in plain Python, so the same integer datapath exists in three forms: the training emulation, the software reference, and the RTL.
 
-By coupling a custom **Quantization-Aware Training (QAT)** pipeline in PyTorch with a register-faithful **Integer Golden Model** and hardware description code, the result is a unified training-to-silicon flow: the physical board produces **bit-exact predictions on all 10,000 MNIST test images** (100% match vs. the integer reference).
+On the MNIST test set, the FPGA output matches the integer golden model on all 10,000 images, and both reach 77.21% accuracy.
 
 ---
 
 ## Performance & Accuracy
 
-The entire MNIST test set of 10,000 images was evaluated on the physical Basys 3 hardware via UART at 115,200 baud, comparing physical FPGA outputs directly against our Python models.
+The MNIST test set (10,000 images) was streamed to the Basys 3 over UART at 115,200 baud and the board's predictions were compared against the Python reference models.
 
-| Evaluation Domain | Dataset Size | Accuracy | Bit-Exact Matches vs. FPGA |
-|-------------------|--------------|----------|----------------------------|
-| **PyTorch QAT (Float Emulation)** | 10,000 images | **77.27%** | *N/A (Float vs. Integer)* |
-| **Integer Golden Model (Python)** | 10,000 images | **77.21%** | **100.0% (10,000 / 10,000)** |
-| **Physical FPGA Hardware (Basys 3)** | 10,000 images | **77.21%** | **100.0% (10,000 / 10,000)** |
+| Evaluation Domain | Dataset Size | Accuracy | Matches vs. FPGA |
+|-------------------|--------------|----------|------------------|
+| PyTorch QAT (float emulation) | 10,000 images | 77.27% | n/a (float vs. integer) |
+| Integer golden model (Python) | 10,000 images | 77.21% | 10,000 / 10,000 |
+| FPGA hardware (Basys 3) | 10,000 images | 77.21% | 10,000 / 10,000 |
 
 > [!NOTE]
-> The initial baseline scored **68%** before fixing quantization clipping and a LayerNorm mismatch in the QAT pipeline; the current design reaches **77.21%** with full bit-exactness to the integer reference. 
+> An early version scored around 68%. Fixing a quantization-clipping issue and a LayerNorm mismatch in the QAT pipeline brought it to 77.21%, at which point the FPGA and the integer reference agree on every test image.
 
 ### FPGA Resource Utilization (xc7a35tcpg236-1)
 
-| Resource | Used | Available | Utilization % |
-|----------|------|-----------|---------------|
-| **Slice LUTs** | 18,523 | 20,800 | 89.05% |
-| **Slice Registers** | 27,245 | 41,600 | 65.49% |
-| **Block RAM (BRAM18)** | 6 | 100 | 6.00% |
-| **DSPs** | 34 | 90 | 37.78% |
+| Resource | Used | Available | Utilization |
+|----------|------|-----------|-------------|
+| Slice LUTs | 18,523 | 20,800 | 89.05% |
+| Slice Registers | 27,245 | 41,600 | 65.49% |
+| Block RAM (BRAM18) | 6 | 100 | 6.00% |
+| DSPs | 34 | 90 | 37.78% |
+
+The LUT budget is fairly tight on this part; the design fits but does not leave much room to grow.
 
 ---
 
 ## Hardware Architecture & VHDL Sources
 
-The hardware is designed for streaming, pipelined register-transfer level (RTL) execution at **50 MHz**, utilizing internal block RAMs (BRAMs) and DSP slices.
+The datapath runs at 50 MHz and uses internal block RAMs and DSP slices.
 
 ```
 Input (784 Pixels)
@@ -63,104 +65,103 @@ Output Prediction (7-Segment Display / UART)
 
 ### VHDL Source Files
 
-| File Basename | Hardware Layer | Mathematical & Register Function |
+| File Basename | Hardware Layer | Function |
 |:---|:---|:---|
-| **[basys3_top.vhd](basys3_top.vhd)** | Top-Level Wrapper | Manages physical board clocks (100MHz PLL to 50MHz), active-low resets, UART RX/TX serial interface (115,200 baud), LED progress indicators, and instantiates the main accelerator core. |
-| **[encoder_block.vhd](encoder_block.vhd)** | Transformer Block | Structural top-level connecting Multi-Head Attention, Feed-Forward Network, Residual Additions, and Layer Normalization modules. |
-| **[weights_pkg.vhd](weights_pkg.vhd)** | Pre-compiled ROM | **Crucial weight package.** Houses all QAT-trained weights, biases, and positional embeddings represented strictly as pre-compiled signed 8-bit Q1.7 integers. |
-| **[patch_embed.vhd](patch_embed.vhd)** | Patch Embedder | Receives 784 raw pixels, partitions them into 16 non-overlapping $7 \times 7$ patches, performs patch projection to $D_{model}=32$ tokens, and adds positional embeddings. |
-| **[layernorm.vhd](layernorm.vhd)** | LayerNorm | **Multiplier-free and division-free.** Computes mean and variance, uses Leading-One Detection (LOD) to approximate the reciprocal-square-root, and performs bit-shifts matching `LN_HEADROOM = 2` (4x scale divisor) to keep tokens in Q1.7 boundaries. |
-| **[softmax.vhd](softmax.vhd)** | Softmax | Performs numerically-stable integer Softmax. Uses a 256-byte ROM Lookup Table (`_EXP_LUT_Q16`) to compute exp over subtraction differences. |
-| **[psum_activation.vhd](psum_activation.vhd)** | GELU LUT | Simulates standard GELU activation in a single clock cycle using a pre-calculated 256-byte ROM Lookup Table (`GELU_LUT_I8`). |
-| **[mha_controller.vhd](mha_controller.vhd)** | Self-Attention | Sequences key, query, and value matrix multiplications, computes attention score dot-products, applies Softmax, and outputs the final projected sequence. |
-| **[ffn.vhd](ffn.vhd)** | Feed-Forward | Implements the FFN: $FC1$ ($32 \rightarrow 64$), GELU activation, and $FC2$ ($64 \rightarrow 32$). |
-| **[gemm_mm.vhd](gemm_mm.vhd)** | active GEMM Engine | **The actual compute core.** Implements a sequential, memory-mapped Multiply-Accumulate (MAC) matrix multiplier. It sequentially sequences calculations over $M \times N \times K$ cycles using highly optimized internal DSP blocks, keeping LUT utilization extremely low. |
-| **[classifier.vhd](classifier.vhd)** | Output Classifier | Conducts Global Average Pooling (GAP) over 16 tokens, executes the final GEMM with the classifier's weights/biases, and runs a strict-greater `argmax` to output the final class (0-9). |
-| **[seg_test.vhd](seg_test.vhd)** | 7-Segment Multiplexer | Dynamically controls the 4-digit display on the Basys 3 board to display the currently predicted digit. |
-| **[control_unit.vhd](control_unit.vhd)** | Controller FSM | Central Finite State Machine that orchestrates the execution states, address generation, RAM writes, and pipelines. |
-| *[gemm_os.vhd](gemm_os.vhd)* | Concept Only (Unused) | Leftover reference implementation of an Output-Stationary Systolic Array. Not instantiated in the active hardware design. |
-| *[gemm_os_adapter.vhd](gemm_os_adapter.vhd)* | Concept Only (Unused) | Leftover reference adapter for the systolic array. Not instantiated in the active hardware design. |
+| [basys3_top.vhd](basys3_top.vhd) | Top-Level Wrapper | Board clocking (100 MHz PLL to 50 MHz), active-low resets, UART RX/TX (115,200 baud), LED status indicators, and instantiation of the accelerator core. |
+| [encoder_block.vhd](encoder_block.vhd) | Transformer Block | Structural top level connecting Multi-Head Attention, the Feed-Forward Network, the residual additions, and Layer Normalization. |
+| [weights_pkg.vhd](weights_pkg.vhd) | Pre-compiled ROM | Holds the QAT-trained weights, biases, and positional embeddings as signed 8-bit Q1.7 integers. |
+| [patch_embed.vhd](patch_embed.vhd) | Patch Embedder | Takes 784 raw pixels, splits them into 16 non-overlapping $7 \times 7$ patches, projects each to a $D_{model}=32$ token, and adds the positional embeddings. |
+| [layernorm.vhd](layernorm.vhd) | LayerNorm | Multiplier-free and division-free. Computes mean and variance, uses Leading-One Detection (LOD) to approximate the reciprocal square root, and bit-shifts according to `LN_HEADROOM = 2` (a 4x scale divisor) to keep tokens within Q1.7 range. |
+| [softmax.vhd](softmax.vhd) | Softmax | Numerically stable integer Softmax using a 256-byte ROM lookup table (`_EXP_LUT_Q16`) to evaluate exp over score differences. |
+| [psum_activation.vhd](psum_activation.vhd) | GELU LUT | Approximates GELU in a single clock cycle via a 256-byte ROM lookup table (`GELU_LUT_I8`). |
+| [mha_controller.vhd](mha_controller.vhd) | Self-Attention | Sequences the key/query/value matrix multiplications, computes the attention score dot products, applies Softmax, and produces the projected sequence. |
+| [ffn.vhd](ffn.vhd) | Feed-Forward | The FFN: $FC1$ ($32 \rightarrow 64$), GELU, and $FC2$ ($64 \rightarrow 32$). |
+| [gemm_mm.vhd](gemm_mm.vhd) | GEMM Engine | The matrix-multiply core used by the design: a sequential, memory-mapped multiply-accumulate (MAC) unit that iterates over $M \times N \times K$ cycles using DSP blocks, which keeps LUT usage low. |
+| [classifier.vhd](classifier.vhd) | Output Classifier | Global Average Pooling (GAP) over the 16 tokens, the final GEMM with the classifier weights/biases, and a strict-greater `argmax` for the output class (0–9). |
+| [seg_test.vhd](seg_test.vhd) | 7-Segment Multiplexer | Drives the Basys 3 4-digit display to show the predicted digit. |
+| [control_unit.vhd](control_unit.vhd) | Controller FSM | Finite state machine coordinating execution states, address generation, RAM writes, and pipelining. |
+| *[gemm_os.vhd](gemm_os.vhd)* | Concept only (unused) | An earlier output-stationary systolic-array implementation. Not instantiated in the active design. |
+| *[gemm_os_adapter.vhd](gemm_os_adapter.vhd)* | Concept only (unused) | The adapter for that systolic array. Not instantiated in the active design. |
 
 ---
 
 ## Python Software & Training Stack
 
-We bridge the gap between continuous floating-point training and discrete integer hardware registers using a three-tier software stack:
+The path from floating-point training to the integer hardware datapath is covered by three Python pieces:
 
-1. **[mnist_poc.py](mnist_poc.py) (PyTorch QAT environment):**
-   - Incorporates custom PyTorch layers (`HWLayerNorm`, `FQLinear`, `HWSoftmax`, `HWGELU`) using Straight-Through Estimators (STE).
-   - Simulates physical integer divisions (`rounding_mode='floor'`) and clamping/saturation (`[-128, 127]`).
-   - Implements a **Logit Scaling factor of 8.0** to keep QAT weights small and bounded while allowing PyTorch's loss function to see unconstrained boundaries for gradient flow.
-2. **[golden_model.py](golden_model.py) (Software Register Simulator):**
-   - Pure Python representation of the hardware. PyTorch-free; integer-only inference path (floats appear only in one-time GELU/softmax LUT construction and input-pixel normalization).
-   - Simulates physical memory offsets, exact bitwise shifts (`>> 7`), and Lookup Table indices.
-3. **[fpga_vs_python.py](fpga_vs_python.py) (Physical UART Test Suite):**
-   - Handles USB-to-UART handshakes at 115,200 baud, sending raw pixels and receiving predictions.
-   - Evaluates the accuracy and verifies the bit-exactness of the FPGA board in real time.
+1. [mnist_poc.py](mnist_poc.py) — PyTorch QAT environment:
+   - Custom PyTorch layers (`HWLayerNorm`, `FQLinear`, `HWSoftmax`, `HWGELU`) using Straight-Through Estimators (STE).
+   - Emulates the integer divisions (`rounding_mode='floor'`) and the `[-128, 127]` clamping/saturation of the hardware.
+   - A logit-scaling factor of 8.0 keeps the QAT weights small while still giving the loss enough range for gradient flow.
+2. [golden_model.py](golden_model.py) — software register simulator:
+   - Plain Python reference for the hardware. PyTorch-free; the inference path is integer-only (floats appear only in one-time GELU/softmax LUT construction and input-pixel normalization).
+   - Models the memory offsets, the exact bit shifts (`>> 7`), and the lookup-table indices used by the RTL.
+3. [fpga_vs_python.py](fpga_vs_python.py) — UART test harness:
+   - Handles the USB-to-UART exchange at 115,200 baud, sending raw pixels and reading back predictions.
+   - Compares the board against the golden model and reports accuracy and agreement.
 
 ---
 
 ## Build & Run
 
-### 1. Fine-Tune and Train QAT Model
-To train the hardware-identical QAT model on your local PC and export the weights:
+### 1. Train the QAT model
+Train the hardware-matched QAT model and export the weights:
 ```bash
 python mnist_poc.py train
 ```
-This runs fine-tuning, achieves **77.27% accuracy**, and writes the weight binaries to `./weights_int8/`.
+This fine-tunes the model (about 77.27% accuracy) and writes the weight binaries to `./weights_int8/`.
 
-### 2. Export Weights to VHDL Package
-Generate the pre-compiled VHDL ROM package `weights_pkg.vhd`:
+### 2. Export weights to the VHDL package
+Regenerate the VHDL ROM package `weights_pkg.vhd`:
 ```bash
 python mnist_poc.py export
 ```
-This updates the Xilinx ROM tables directly inside [weights_pkg.vhd](weights_pkg.vhd).
+This rewrites the ROM tables inside [weights_pkg.vhd](weights_pkg.vhd).
 
-### 3. Synthesize and Implement via Vivado
-Open Xilinx Vivado (2025.2 or similar) and run the batch TCL compilation script to generate the physical bitstream:
+### 3. Synthesize and implement in Vivado
+Open Xilinx Vivado (2025.2 or similar) and run the batch TCL script to build the bitstream:
 ```powershell
 cd vivado_synth_test
 C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat -mode batch -source basys3_impl.tcl
 ```
-This performs RTL synthesis, timing optimization, placement, routing, and generates `basys3_top.bit`.
+This runs synthesis, placement, and routing, and produces `basys3_top.bit`.
 
-### 4. Program / Flash the FPGA
-Plug the Basys 3 board into your PC via USB, power it on, and program it using the JTAG script:
+### 4. Program the FPGA
+Connect the Basys 3 over USB, power it on, and program it via the JTAG script:
 ```powershell
 .\flash_transformer.bat
 ```
-The board's LEDs will show programming activity, concluding in `startup status: HIGH`.
+The board LEDs show programming activity and end at `startup status: HIGH`.
 
-### 5. Execute Physical Hardware Evaluation
-Run the real-time UART test suite to verify 10,000 images on the physical chip:
+### 5. Run the hardware evaluation
+Run the UART harness to evaluate the 10,000 test images on the board:
 ```bash
 python fpga_vs_python.py --port COM4 --count 10000
 ```
-This streams the images over COM4 and verifies the final, physical **77.21% accuracy** with **100.0% perfect bit-exact matches**!
+This streams the images over COM4 and reports the 77.21% accuracy and the per-image agreement with the golden model.
 
 ---
 
 ## Architecture Diagrams
 
-Two views of the same architecture:
-1. **Flowchart** — signals, ports, and submodules at a glance.
-2. **Detailed schematic** — clock domains, ROM access, control paths, and SRAM replay buffers.
+Two views of the same design:
+1. Flowchart — signals, ports, and submodules at a glance.
+2. Detailed schematic — clock domains, ROM access, control paths, and SRAM buffers.
 
 ---
 
-### 1. Technical Flowchart
+### 1. Flowchart
 
-A flowchart of the exact signals, ports, and submodules, with a color-coded legend:
+Signals, ports, and submodules, with a color-coded legend:
 
 ![ViT FPGA architecture flowchart](architecture_flowchart.png)
 
-* **Legend:** **Cyan** = Activation/Pixel Data | **Orange** = Weights/ROM Access | **Green** = Prediction/Output | **Purple** = Control/Status / Encoder logic | **Blue** = Control Unit & Local SRAM Buffers.
+* Legend: Cyan = activation/pixel data | Orange = weights/ROM access | Green = prediction/output | Purple = control/status and encoder logic | Blue = control unit and local SRAM buffers.
 
 ---
 
 ### 2. Vector Schematic (SVG)
 
-A detailed SVG schematic of the dataflow, clock domains, weights-ROM access, control paths, and internal SRAM replay buffers — vector, so it stays sharp at any zoom:
+A vector schematic of the dataflow, clock domains, weights-ROM access, control paths, and internal SRAM buffers:
 
 ![VHDL Architecture Detail Vector Schematic](vhdl_architecture_detail.svg)
-
