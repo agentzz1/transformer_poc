@@ -66,3 +66,20 @@ via self-play-vs-stock does not transfer. Dropped.
    cutoff and in the silver zone. Submitted exp48_public variant (the proven
    default; sha256-verified decode of the notebook's embedded archive).
    Challenger variant exp48_2p_regroup_4p_original kept as backup (unproven on LB).
+
+## CORRECTION: the ~1165 "ceiling" was wrong — it's incomplete convergence
+Verified: Pilkwang's exp48 archive == slawekbiel dataset orbit_lite + exp48 main.py,
+BYTE-IDENTICAL to what we submitted. Same agent (waves=7, term 8, horizon 18,
+sizes 0.5/0.75/1.0). So we DID effectively try the "exp48 (exp41+7 waves, 1301.9)"
+notebook — re-submitting it changes nothing.
+
+Same-agent authors' CURRENT ranks (4204 teams):
+  slawekbiel  1298.5 (rank 76)
+  Pilkwang    1207.9 (rank 260)   <- submitted the byte-identical archive to ours
+  ShumingFang 1184.6 (rank 389)   <- bronze zone
+  US          1165.8 (rank 525)
+=> The 42-pt gap to Pilkwang (identical agent) is convergence + variance, NOT a
+   better version. Our submission is younger/fewer games and still oscillating
+   (it already touched 1192). Byte-identical agents converge to similar ratings.
+   Expect ours to drift toward ~1185-1207 = BRONZE ZONE with more games.
+   Action: wait for convergence; no resubmit needed.
