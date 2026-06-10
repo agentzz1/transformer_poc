@@ -59,3 +59,8 @@ kaggle_spaceship/submission.csv
 kaggle_spaceship/submission_v2.csv
 kaggle_spaceship/submission_v3.csv
 kaggle_orbitwars/yours/
+kaggle_orbitwars/replays/
+kaggle_orbitwars/top_replays/
+kaggle_orbitwars/logs/
+kaggle_orbitwars/producer/submission.tar.gz
+kaggle_orbitwars/tamrazov/*/
