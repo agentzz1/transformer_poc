@@ -28,3 +28,18 @@ Per-turn timing at horizon 20-26 stays <40ms (Kaggle limit 1000ms) -> safe.
 ### Next levers to test
 - 4P horizon sweep (separate 1-vs-3 self-play harness).
 - min_ships_to_launch (big ship margin but mixed winrate — worth a field test).
+
+## 4P tuning — NEGATIVE result (kept stock)
+4P self-play (`producer_tune4p.py`, variant in 1 seat vs 3 stock):
+small-sample runs (24-48 games) hinted horizon=20 helped (share 0.30-0.33),
+but at 64 games it REVERSED — all horizon changes hurt:
+  h18 share 0.193, h20 0.224, h22 0.124  (vs 0.250 baseline).
+=> the early 4P signal was noise. CONFIG_4P horizon=13 is already well tuned;
+   leave the 4P preset untouched. Only the 2P horizon=20 change ships.
+
+## Reality check on "top 3"
+Public Producer Hybrid v4 converges ~1150-1200. Top 3 needs ~1660+.
+Tamrazov (the author, a strong competitor) is himself not top 3 with this agent,
+so config tweaks alone will NOT close the gap — that requires a stronger
+planner/scorer (code-level R&D), higher risk, uncertain payoff in the time left.
+The horizon=20 edge is a real but modest improvement over identical public copies.
