@@ -56,8 +56,9 @@ class ProducerLiteConfig:
     """Behaviour knobs.  """
 
     
-    # the projection window, the movement build length, AND the target ETA cap 
-    horizon: int = 18
+    # the projection window, the movement build length, AND the target ETA cap
+    # tuned 18->20 via controlled self-play A/B (0.70 winrate, +739 ships vs stock over 60 games)
+    horizon: int = 20
     # --- shortlists ------------------------------------------------------
     max_sources_per_lane: int = 12
     max_offensive_targets: int = 12         # enemy/neutral proximity targets
