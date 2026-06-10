@@ -28,6 +28,8 @@ VARIANTS = {
     "horizon26": {"horizon": 26},
     "h24_ms3":   {"horizon": 24, "min_ships_to_launch": 3.0},
     "h24_src16": {"horizon": 24, "max_sources_per_lane": 16, "max_offensive_targets": 16},
+    "horizon19": {"horizon": 19},
+    "horizon21": {"horizon": 21},
 }
 
 _M = None  # per-worker module handle
