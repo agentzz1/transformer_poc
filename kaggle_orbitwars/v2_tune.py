@@ -40,6 +40,13 @@ VARIANTS = {
     "ms_beta3":     {"size_multipliers": (0.5, 0.75, 1.0), "reinforce_size_beta": 3.0},
     "ms75_beta3":   {"size_multipliers": (0.75, 1.0), "reinforce_size_beta": 3.0},
     "ms_beta3_h20": {"size_multipliers": (0.5, 0.75, 1.0), "reinforce_size_beta": 3.0, "horizon": 20},
+    # next-candidate exploration (built on ms75_beta3 = best so far)
+    "ms85_b3":      {"size_multipliers": (0.85, 1.0), "reinforce_size_beta": 3.0},
+    "ms_fine_b3":   {"size_multipliers": (0.6, 0.8, 1.0), "reinforce_size_beta": 3.0},
+    "breadth_msb3": {"size_multipliers": (0.75, 1.0), "reinforce_size_beta": 3.0,
+                     "max_offensive_targets": 16, "max_sources_per_lane": 16},
+    "def6_msb3":    {"size_multipliers": (0.75, 1.0), "reinforce_size_beta": 3.0,
+                     "max_defensive_targets": 6},
 }
 
 _M = None

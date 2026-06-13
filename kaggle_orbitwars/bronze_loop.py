@@ -9,7 +9,8 @@ line wakes the /loop turn to evaluate and act.
 import time, subprocess, glob, csv, os, re, json
 
 os.environ["KAGGLE_API_TOKEN"] = "KGAT_89355067f08958fd6805b6053c24d9e0"
-V2, MS = 53632955, 53633979
+V2, MS, BR = 53632955, 53633979, 53634496
+TRACKED = (V2, MS, BR)
 STATE = "/tmp/bronze_state.json"
 
 
@@ -18,7 +19,7 @@ def sub_scores():
                          capture_output=True, text=True).stdout
     res, err = {}, False
     for line in out.splitlines():
-        for ref in (V2, MS):
+        for ref in TRACKED:
             if str(ref) in line:
                 m = re.search(r"COMPLETE\s+([0-9]+\.[0-9])", line)
                 if m:
@@ -85,6 +86,7 @@ while True:
         st["last_emit_best"] = best
         rk = f"{rank}/{n}" if rank else f"?/{n}"
         print(f"LOOP[{tag}] rank={rk} bronze_cut={cutoff}(~{cutscore:.0f}) "
-              f"best={best:.1f} V2={scores.get(V2,'?')} ms75={scores.get(MS,'?')}", flush=True)
+              f"best={best:.1f} V2={scores.get(V2,'?')} ms75={scores.get(MS,'?')} "
+              f"breadth={scores.get(BR,'?')}", flush=True)
     save_state(st)
     time.sleep(600)
