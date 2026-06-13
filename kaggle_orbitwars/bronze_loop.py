@@ -43,8 +43,9 @@ def rank_info():
     n = len(scores)
     cutoff = max(1, int(n * 0.10))
     silver = max(1, int(n * 0.05))
+    top1 = max(1, int(n * 0.01))
     cutscore = scores[cutoff - 1]
-    return (n, cutoff, silver, cutscore, scores)
+    return (n, cutoff, silver, top1, cutscore, scores)
 
 
 def rank_from_score(scores, best):
@@ -74,23 +75,27 @@ while True:
     if not ri:
         time.sleep(600)
         continue
-    n, cutoff, silver, cutscore, all_scores = ri
+    n, cutoff, silver, top1, cutscore, all_scores = ri
     best = max(scores.values()) if scores else 0.0
     rank = rank_from_score(all_scores, best)        # live-score-based, lag-free
     in_bronze = rank <= cutoff
     in_silver = rank <= silver
+    in_top1 = rank <= top1
     st = load_state()
     emit, tag = False, ""
     if err:
         emit, tag = True, "SUBMISSION_ERROR"
+    elif in_top1 and not st.get("was_top1"):
+        emit, tag = True, "TOP_1_PERCENT"
     elif st["was_in"] is not None and in_bronze != st["was_in"]:
         emit, tag = True, ("ENTERED_BRONZE" if in_bronze else "DROPPED_OUT_OF_BRONZE")
     elif abs(best - st["last_emit_best"]) >= 40:
         emit, tag = True, ("SILVER_ZONE" if in_silver else "CONVERGENCE")
     st["was_in"] = in_bronze
+    st["was_top1"] = in_top1
     if emit:
         st["last_emit_best"] = best
-        zone = "SILVER" if in_silver else ("bronze" if in_bronze else "below-bronze")
+        zone = "TOP1%" if in_top1 else ("SILVER" if in_silver else ("bronze" if in_bronze else "below-bronze"))
         print(f"LOOP[{tag}] rank~{rank}/{n}({zone}) bronze_cut={cutoff}(~{cutscore:.0f}) "
               f"best={best:.1f} V2={scores.get(V2,'?')} ms75={scores.get(MS,'?')} "
               f"breadth={scores.get(BR,'?')}", flush=True)
