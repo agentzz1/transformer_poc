@@ -6,7 +6,7 @@ boundary either way, or meaningful convergence movement (best >= +/-40 since
 last emit). State persists in /tmp so it survives monitor re-arms. Each printed
 line wakes the /loop turn to evaluate and act.
 """
-import time, subprocess, glob, csv, os, re, json
+import time, subprocess, glob, csv, os, re, json, datetime
 
 os.environ["KAGGLE_API_TOKEN"] = "KGAT_89355067f08958fd6805b6053c24d9e0"
 V2, MS, BR = 53632955, 53633979, 53634496
@@ -20,13 +20,15 @@ def sub_scores():
     value regardless of how many variants are in flight."""
     out = subprocess.run(["python3", "-m", "kaggle", "competitions", "submissions", "orbit-wars"],
                          capture_output=True, text=True).stdout
+    today = datetime.date.today().isoformat()  # e.g. 2026-06-13
     res, err = {}, False
     for line in out.splitlines():
         ref_m = re.match(r"\s*(\d{6,})", line)
         sc_m = re.search(r"COMPLETE\s+([0-9]+\.[0-9])", line)
         if ref_m and sc_m:
             res[int(ref_m.group(1))] = float(sc_m.group(1))
-        if ref_m and "ERROR" in line.upper():
+        # only flag a genuine error on a submission made TODAY (ignore old/desc text)
+        if ref_m and "SubmissionStatus.ERROR" in line and today in line:
             err = True
     return res, err
 
