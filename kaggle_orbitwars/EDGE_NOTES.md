@@ -119,3 +119,15 @@ But my local-tested tweaks LOST in the field:
 Loop fix: estimate rank from live best score vs CSV distribution (public CSV
 lags and showed our ms75 score instead of V2, causing a false drop alert).
 Bronze comfortably secured; sitting in SILVER zone on V2 alone.
+
+## 2026-06-13 prize-opportunity scan (other competitions)
+Active comps w/ prize (deadline > today):
+  arc-prize-2026-arc-agi-3  $850k 2026-11-02 (entered) - abstract reasoning, NOT our strength
+  arc-prize-2026-arc-agi-2  $700k 2026-11-02 (entered) - same
+  arc-prize-2026-paper-track $450k 2026-11-09
+  nvidia-nemotron-reasoning $106k 2026-06-15 (entered) - too late (LLM reasoning)
+  neurogolf-2026            $50k  2026-07-15 (entered, 3x ERROR, no standing) - multi-task code/algo
+  orbit-wars                $50k  2026-06-23 (entered) - SILVER medal range, NOT prize (top10~1529 vs our ~1333)
+Verdict: our edge (adopt strongest public agent -> medal range) yields MEDALS not PRIZE
+(prize needs top ~3-10 absolute, far above public-agent ceilings). No easy prize chance.
+neurogolf-2026 is the only open question (would need real from-scratch work).
