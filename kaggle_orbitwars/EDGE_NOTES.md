@@ -83,3 +83,18 @@ Same-agent authors' CURRENT ranks (4204 teams):
    (it already touched 1192). Byte-identical agents converge to similar ratings.
    Expect ours to drift toward ~1185-1207 = BRONZE ZONE with more games.
    Action: wait for convergence; no resubmit needed.
+
+## 2026-06-13: TOP 1% PUSH (deadline 06-23, 4377 teams, Featured/$50k=medals)
+Thresholds: TOP1%=rank43/1391.8 | silver=rank218/1231 | bronze=rank437/1174.
+Reality: public exp48 clones DECAYED as field strengthened (us 1165->1100,
+Pilkwang 1207->1143, ShumingFang 1184->1114). Fixed clones lose ground.
+
+Strongest ADOPTABLE public base = slawekbiel "The Producer V2" = 1320.7 (top 1.8%).
+ (title-claim notebooks are inflated: ramesh888 "1400+ ELO" is really 1161.)
+V2 key idea: reinforcement-aware ROI — capture floor inflated by
+ beta*rho(eta)*reachable_enemy_mass (opponents can reinforce mid-flight).
+ Single-size fleets (dropped exp48 multi-size); NO terminal phase.
+=> Phase 1: submitted V2 as floor. Phase 2 levers to exceed 1320->1391:
+   (a) multi-size + reinforcement combo, (b) add terminal/endgame phase,
+   (c) opponent-response modeling, (d) config (beta/waves/horizon).
+   Validate via head-to-head vs V2 in BOTH 2P & 4P; field-test daily.
