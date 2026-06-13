@@ -38,15 +38,19 @@ def rank_info():
     fs = glob.glob(d + "/*publicleaderboard*.csv")
     if not fs:
         return None
-    rows = [r for r in csv.DictReader(open(fs[0])) if r["Score"]]
-    rows.sort(key=lambda r: float(r["Score"]), reverse=True)
-    n = len(rows)
+    scores = sorted((float(r["Score"]) for r in csv.DictReader(open(fs[0])) if r["Score"]),
+                    reverse=True)
+    n = len(scores)
     cutoff = max(1, int(n * 0.10))
-    cutscore = float(rows[cutoff - 1]["Score"])
-    for i, r in enumerate(rows, 1):
-        if "agentzz" in (r.get("TeamMemberUserNames") or "").lower():
-            return (i, float(r["Score"]), n, cutoff, cutscore)
-    return (None, None, n, cutoff, cutscore)
+    silver = max(1, int(n * 0.05))
+    cutscore = scores[cutoff - 1]
+    return (n, cutoff, silver, cutscore, scores)
+
+
+def rank_from_score(scores, best):
+    """Estimate our live rank: teams strictly above our best live score + 1.
+    Avoids the public-CSV lag where our row may still show an older/other sub."""
+    return sum(1 for s in scores if s > best) + 1
 
 
 def load_state():
@@ -70,9 +74,11 @@ while True:
     if not ri:
         time.sleep(600)
         continue
-    rank, myscore, n, cutoff, cutscore = ri
+    n, cutoff, silver, cutscore, all_scores = ri
     best = max(scores.values()) if scores else 0.0
-    in_bronze = (rank is not None and rank <= cutoff)
+    rank = rank_from_score(all_scores, best)        # live-score-based, lag-free
+    in_bronze = rank <= cutoff
+    in_silver = rank <= silver
     st = load_state()
     emit, tag = False, ""
     if err:
@@ -80,12 +86,12 @@ while True:
     elif st["was_in"] is not None and in_bronze != st["was_in"]:
         emit, tag = True, ("ENTERED_BRONZE" if in_bronze else "DROPPED_OUT_OF_BRONZE")
     elif abs(best - st["last_emit_best"]) >= 40:
-        emit, tag = True, "CONVERGENCE"
+        emit, tag = True, ("SILVER_ZONE" if in_silver else "CONVERGENCE")
     st["was_in"] = in_bronze
     if emit:
         st["last_emit_best"] = best
-        rk = f"{rank}/{n}" if rank else f"?/{n}"
-        print(f"LOOP[{tag}] rank={rk} bronze_cut={cutoff}(~{cutscore:.0f}) "
+        zone = "SILVER" if in_silver else ("bronze" if in_bronze else "below-bronze")
+        print(f"LOOP[{tag}] rank~{rank}/{n}({zone}) bronze_cut={cutoff}(~{cutscore:.0f}) "
               f"best={best:.1f} V2={scores.get(V2,'?')} ms75={scores.get(MS,'?')} "
               f"breadth={scores.get(BR,'?')}", flush=True)
     save_state(st)

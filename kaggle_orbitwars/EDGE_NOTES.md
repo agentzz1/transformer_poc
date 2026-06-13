@@ -108,3 +108,14 @@ V2 key idea: reinforcement-aware ROI — capture floor inflated by
   terminal phase              ~0.44 (no help) ; waves8 0.42 ; horizon20 0.55(+50)
 Changes affect 2P config ONLY; 4P pinned to stock V2 (no regression). Field test
 pending — local self-play is an imperfect predictor, so the LB is the judge.
+
+## 2026-06-13 field verdict: local improvements DO NOT transfer
+V2 converged to 1274.4 (still climbing) => est. true rank ~124/4380 = TOP 2.8% = SILVER.
+But my local-tested tweaks LOST in the field:
+  ms75_beta3 (0.60 vs V2 local) -> field 1170 (BELOW V2 1274)
+  breadth_msb3 (0.64 local)     -> still climbing, expected below V2
+=> Confirmed (again): self-play-vs-V2 winrate is NOT predictive of field ELO.
+   Stock V2 is our best agent. Stop submitting V2 derivatives.
+Loop fix: estimate rank from live best score vs CSV distribution (public CSV
+lags and showed our ms75 score instead of V2, causing a false drop alert).
+Bronze comfortably secured; sitting in SILVER zone on V2 alone.
