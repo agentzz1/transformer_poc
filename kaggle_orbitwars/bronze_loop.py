@@ -15,17 +15,19 @@ STATE = "/tmp/bronze_state.json"
 
 
 def sub_scores():
+    """All of our submissions' current COMPLETE public scores, keyed by ref id.
+    Generic: captures every submission so `best` reflects our true leaderboard
+    value regardless of how many variants are in flight."""
     out = subprocess.run(["python3", "-m", "kaggle", "competitions", "submissions", "orbit-wars"],
                          capture_output=True, text=True).stdout
     res, err = {}, False
     for line in out.splitlines():
-        for ref in TRACKED:
-            if str(ref) in line:
-                m = re.search(r"COMPLETE\s+([0-9]+\.[0-9])", line)
-                if m:
-                    res[ref] = float(m.group(1))
-                if "ERROR" in line.upper():
-                    err = True
+        ref_m = re.match(r"\s*(\d{6,})", line)
+        sc_m = re.search(r"COMPLETE\s+([0-9]+\.[0-9])", line)
+        if ref_m and sc_m:
+            res[int(ref_m.group(1))] = float(sc_m.group(1))
+        if ref_m and "ERROR" in line.upper():
+            err = True
     return res, err
 
 
@@ -96,8 +98,9 @@ while True:
     if emit:
         st["last_emit_best"] = best
         zone = "TOP1%" if in_top1 else ("SILVER" if in_silver else ("bronze" if in_bronze else "below-bronze"))
+        top3 = sorted(scores.values(), reverse=True)[:3]
         print(f"LOOP[{tag}] rank~{rank}/{n}({zone}) bronze_cut={cutoff}(~{cutscore:.0f}) "
-              f"best={best:.1f} V2={scores.get(V2,'?')} ms75={scores.get(MS,'?')} "
-              f"breadth={scores.get(BR,'?')}", flush=True)
+              f"top1%~{top1}(~{all_scores[top1-1]:.0f}) best={best:.1f} "
+              f"our_top3={[round(x,1) for x in top3]}", flush=True)
     save_state(st)
     time.sleep(600)
