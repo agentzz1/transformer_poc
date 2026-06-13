@@ -8,7 +8,8 @@ line wakes the /loop turn to evaluate and act.
 """
 import time, subprocess, glob, csv, os, re, json, datetime
 
-os.environ["KAGGLE_API_TOKEN"] = "KGAT_89355067f08958fd6805b6053c24d9e0"
+# Token from environment only — never hardcode secrets in committed code.
+assert os.environ.get("KAGGLE_API_TOKEN"), "set KAGGLE_API_TOKEN in the environment"
 V2, MS, BR = 53632955, 53633979, 53634496
 TRACKED = (V2, MS, BR)
 STATE = "/tmp/bronze_state.json"
