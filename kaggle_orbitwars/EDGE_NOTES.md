@@ -98,3 +98,13 @@ V2 key idea: reinforcement-aware ROI — capture floor inflated by
    (a) multi-size + reinforcement combo, (b) add terminal/endgame phase,
    (c) opponent-response modeling, (d) config (beta/waves/horizon).
    Validate via head-to-head vs V2 in BOTH 2P & 4P; field-test daily.
+
+## 2026-06-13 Phase 2 results (main_lab = V2 + multi-size + terminal, parity-verified)
+2P self-play vs stock V2 (60 games each, ship margin in parens):
+  beta3 (2.2->3.0)            0.57 (+1123)
+  multi-size (0.5,0.75,1.0)   0.57 (+968)
+  ms_beta3                    0.58 (+790)
+  ms75_beta3 (0.75,1.0;b3)    0.60 (+1074)   <- best, SUBMITTED for field test
+  terminal phase              ~0.44 (no help) ; waves8 0.42 ; horizon20 0.55(+50)
+Changes affect 2P config ONLY; 4P pinned to stock V2 (no regression). Field test
+pending — local self-play is an imperfect predictor, so the LB is the judge.
