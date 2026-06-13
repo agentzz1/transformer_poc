@@ -1,76 +1,67 @@
-# ── GHDL / simulation artefacts ──────────────────────────────────────────
-work/
-work_basys/
-*.cf
-*.ghw
-*.o
-*.vcd
-*.log
-# generated dumps: encoder_out*, py_*, pixels_*, reference_*, scales, ...
-*.txt
-dfx_runtime.txt
 
-# ── Vivado artefacts (keep the .tcl build scripts, drop everything else) ──
-vivado_synth_test/*
 !vivado_synth_test/*.tcl
-*.bit
-*.mcs
-*.prm
-*.dcp
-*.rpt
-*.jou
-*.backup.log
-.Xil/
-
-# ── Python ───────────────────────────────────────────────────────────────
-.venv/
-venv/
-__pycache__/
-*.pyc
-
-# ── MNIST data (re-downloaded automatically by torchvision) ──────────────
-data/
-
-# ── Local / private (chat session exports, scratch, editor state) ────────
-.claude/
-scratch/
-extracted_sessions/
-
-# ── OS ───────────────────────────────────────────────────────────────────
-Thumbs.db
-.DS_Store
-
-# ── Unreferenced AI-generated diagram (kept locally, not in the public repo) ─
-vit_fpga_architecture.png
-
+# generated dumps: encoder_out*, py_*, pixels_*, reference_*, scales, ...
+# ── GHDL / simulation artefacts ──────────────────────────────────────────
 # ── Kaggle S6E6 artefacts (large/derived; not source) ──
-kaggle_s6e6/submission*.csv
-kaggle_s6e6/*.npy
+# ── Local / private (chat session exports, scratch, editor state) ────────
+# ── MNIST data (re-downloaded automatically by torchvision) ──────────────
+# ── OS ───────────────────────────────────────────────────────────────────
+# ── Python ───────────────────────────────────────────────────────────────
+# ── Unreferenced AI-generated diagram (kept locally, not in the public repo) ─
+# ── Vivado artefacts (keep the .tcl build scripts, drop everything else) ──
+*.backup.log
+*.bit
+*.cf
+*.dcp
+*.ghw
+*.jou
+*.log
+*.mcs
+*.o
+*.prm
+*.pyc
+*.rpt
+*.txt
+*.vcd
 *.zip
-kaggle_s6e6/sub_*.csv
-kaggle_s6e6/meta.json
+.DS_Store
+.Xil/
+.claude/
+.venv/
+Thumbs.db
+__pycache__/
 catboost_info/
+data/
+dfx_runtime.txt
+extracted_sessions/
+kaggle_orbitwars/better_payload/
+kaggle_orbitwars/logs/
+kaggle_orbitwars/pilkwang/
+kaggle_orbitwars/producer/
+kaggle_orbitwars/producer/submission.tar.gz
+kaggle_orbitwars/producer_v2/
+kaggle_orbitwars/replays/
+kaggle_orbitwars/slawekbiel/
+kaggle_orbitwars/slawekbiel_v2/
+kaggle_orbitwars/tamrazov/*/
+kaggle_orbitwars/top_replays/
+kaggle_orbitwars/yours/
+kaggle_rogii/_*.csv
+kaggle_rogii/sub_*.csv
+kaggle_s6e6/*.npy
+kaggle_s6e6/ag_out/
+kaggle_s6e6/meta.json
 kaggle_s6e6/pulled/
 kaggle_s6e6/push/ag_*
-kaggle_s6e6/ag_out/
-kaggle_rogii/sub_*.csv
-kaggle_rogii/_*.csv
+kaggle_s6e6/sub_*.csv
+kaggle_s6e6/submission*.csv
 kaggle_spaceship/submission.csv
 kaggle_spaceship/submission_v2.csv
 kaggle_spaceship/submission_v3.csv
-kaggle_orbitwars/yours/
-kaggle_orbitwars/replays/
-kaggle_orbitwars/top_replays/
-kaggle_orbitwars/logs/
-kaggle_orbitwars/producer/submission.tar.gz
-kaggle_orbitwars/tamrazov/*/
-kaggle_orbitwars/better_payload/
-kaggle_orbitwars/producer/
-kaggle_orbitwars/pilkwang/
-kaggle_orbitwars/better_payload/
-kaggle_orbitwars/pilkwang/
-kaggle_orbitwars/slawekbiel/
-kaggle_orbitwars/better_payload/
-kaggle_orbitwars/producer_v2/
-kaggle_orbitwars/slawekbiel_v2/
-kaggle_orbitwars/slawekbiel/
+neurogolf/
+scratch/
+venv/
+vit_fpga_architecture.png
+vivado_synth_test/*
+work/
+work_basys/
